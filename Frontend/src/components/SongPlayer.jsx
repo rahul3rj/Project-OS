@@ -83,6 +83,17 @@ const SongPlayer = ({ dragHandleProps, playlistUrl, autoPlay, customVideo, stati
     }
   }, [activeStreamUrl]);
 
+  // Clean up audio element on component unmount
+  useEffect(() => {
+    const currentAudio = audioRef.current;
+    return () => {
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.src = "";
+      }
+    };
+  }, []);
+
   const togglePlay = () => {
     if (!audioRef.current) return;
     const currentAudio = audioRef.current;
