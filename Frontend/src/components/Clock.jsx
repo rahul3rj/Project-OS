@@ -23,41 +23,51 @@ const Clock = ({ isDashboard = false }) => {
   }, [])
 
   useEffect(() => {
-    let active = true
+    let active = true;
 
     const fetchWeather = async (lat, lon) => {
       try {
         const res = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`
-        )
-        const data = await res.json()
+        );
+        const data = await res.json();
         if (data?.current_weather && active) {
-          const temp = Math.round(data.current_weather.temperature)
-          const emoji = weatherCodeToEmoji(data.current_weather.weathercode)
-          setWeather({ temp, emoji, loaded: true })
+          const temp = Math.round(data.current_weather.temperature);
+          const emoji = weatherCodeToEmoji(data.current_weather.weathercode);
+          setWeather({ temp, emoji, loaded: true });
         }
       } catch (err) {
-        console.warn('Weather fetch failed, using fallback:', err)
+        console.warn('Weather fetch failed, using fallback:', err);
       }
-    }
+    };
 
-    if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (!active) return
-          fetchWeather(pos.coords.latitude, pos.coords.longitude)
-        },
-        () => {
-          fetchWeather(28.6139, 77.209)
-        },
-        { timeout: 8000 }
-      )
-    }
+    const loadWeather = () => {
+      if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (!active) return;
+            fetchWeather(pos.coords.latitude, pos.coords.longitude);
+          },
+          () => {
+            if (!active) return;
+            fetchWeather(28.6139, 77.209);
+          },
+          { timeout: 8000 }
+        );
+      } else {
+        fetchWeather(28.6139, 77.209);
+      }
+    };
+
+    loadWeather();
+    // Refresh weather every 30 minutes
+    const weatherIntervalId = setInterval(loadWeather, 30 * 60 * 1000);
 
     return () => {
-      active = false
-    }
-  }, [])
+      active = false;
+      clearInterval(weatherIntervalId);
+    };
+  }, []);
 
   const hoursMinutes = useMemo(() => {
     const h = String(now.getHours()).padStart(2, '0')
