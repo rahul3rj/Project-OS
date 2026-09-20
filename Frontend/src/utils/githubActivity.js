@@ -3,6 +3,24 @@ const GITHUB_API = "https://api.github.com";
 const GITHUB_WEB = "https://github.com";
 const GITHUB_USERNAME_RE = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i;
 
+// Cache map: username -> { timestamp, data }
+const cache = new Map();
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 8000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(id);
+  }
+};
+
 /** Extracts a plain GitHub username from raw input (URL, @handle, or bare name). */
 export const extractUsername = (input) => {
   const raw = String(input ?? "").trim().replace(/^@+/, "");
@@ -55,16 +73,16 @@ const contributeDeltaForEvent = (event) => {
 };
 
 /**
- * Primary source: the same third-party API your portfolio uses
- * (`github-contributions-api.jogruber.de`). Returns complete per-day counts
- * and levels for the full history, matches GitHub exactly, and sends
- * `Access-Control-Allow-Origin: *` so it works from localhost dev too.
+ * Primary source: third-party API (github-contributions-api.jogruber.de).
  */
 const fetchJogruber = async (username) => {
   const url = `${JOG_RUBER_API}/v4/${encodeURIComponent(username)}`;
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   if (res.status === 404) {
     throw new Error(`GitHub user "@${username}" was not found.`);
+  }
+  if (res.status === 429) {
+    throw new Error("Rate limit exceeded for contribution service. Please retry in a few moments.");
   }
   if (!res.ok) {
     throw new Error(`GitHub API error (HTTP ${res.status}).`);
@@ -118,15 +136,16 @@ const parseContributionsHtml = (html) => {
 };
 
 /**
- * Fallback 1: GitHub's own contributions page. Exact levels GitHub shows, but
- * only works from the extension page (https://github.com/* host permission);
- * CORS-blocked from localhost.
+ * Fallback 1: GitHub contributions scrape page.
  */
 const fetchScrape = async (username) => {
   const url = `${GITHUB_WEB}/users/${encodeURIComponent(username)}/contributions`;
-  const res = await fetch(url, { headers: { Accept: "text/html" } });
+  const res = await fetchWithTimeout(url, { headers: { Accept: "text/html" } });
   if (res.status === 404) {
     throw new Error(`GitHub user "@${username}" was not found.`);
+  }
+  if (res.status === 429) {
+    throw new Error("GitHub rate limit reached. Please try again shortly.");
   }
   if (!res.ok) {
     throw new Error(`GitHub error (HTTP ${res.status}).`);
@@ -148,8 +167,7 @@ const fetchScrape = async (username) => {
 };
 
 /**
- * Fallback 2 (local-only, approximate): aggregates public events via the REST
- * API. Only covers roughly the last ~90 days, so the graph is sparse.
+ * Fallback 2 (local-only, approximate): aggregates public events via the REST API.
  */
 const fetchGitHubEvents = async (username, pages = 3) => {
   const perPage = 100;
@@ -161,7 +179,7 @@ const fetchGitHubEvents = async (username, pages = 3) => {
     const url = `${GITHUB_API}/users/${encodeURIComponent(username)}/events/public?per_page=${perPage}&page=${page}`;
     let res;
     try {
-      res = await fetch(url, { headers: { Accept: "application/vnd.github+json" } });
+      res = await fetchWithTimeout(url, { headers: { Accept: "application/vnd.github+json" } });
     } catch {
       if (!fetchedAny) {
         throw new Error("Network error while fetching GitHub activity.");
@@ -200,22 +218,34 @@ const fetchGitHubEvents = async (username, pages = 3) => {
 };
 
 /**
- * Fetches GitHub contributions for a user, preferring the most complete,
- * CORS-friendly source and falling back down the chain when one fails.
+ * Fetches GitHub contributions for a user with caching and fallback chain.
  */
-export const fetchGitHubContributions = async (inputUsername) => {
+export const fetchGitHubContributions = async (inputUsername, bypassCache = false) => {
   const username = extractUsername(inputUsername);
   if (!username) {
     throw new Error("Enter a GitHub username or profile link.");
   }
 
+  const normalized = username.toLowerCase();
+  const cached = cache.get(normalized);
+  if (!bypassCache && cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  let result;
   try {
-    return await fetchJogruber(username);
+    result = await fetchJogruber(username);
   } catch {
     try {
-      return await fetchScrape(username);
+      result = await fetchScrape(username);
     } catch {
-      return fetchGitHubEvents(username);
+      result = await fetchGitHubEvents(username);
     }
   }
+
+  if (result) {
+    cache.set(normalized, { timestamp: Date.now(), data: result });
+  }
+
+  return result;
 };
