@@ -5,6 +5,7 @@ import DashboardGrid from "./components/DashboardGrid.jsx";
 import HeroView from "./components/HeroView.jsx";
 import SettingsPage from "./components/SettingsPage.jsx";
 import { storageGetMultiple, storageSet } from "./utils/storage.js";
+import { sortGroupsByTime } from "./utils/timeBoxOrder.js";
 import { STORAGE_KEY_UI_THEME } from "./themes/index.js";
 
 const STORAGE = {
@@ -34,8 +35,12 @@ const STORAGE = {
   lofiStations: "settings_lofi_stations_v1",
   importantTabsConfig: "settings_imp_tabs_config_v1",
   timeBoxingGroups: "settings_timebox_groups_v2",
+  timeBoxNotifEnabled: "settings_timebox_notif_v1",
+  timeBoxRingtone: "settings_timebox_ringtone_v1",
   themeTextColorIndex: "settings_theme_text_color_idx_v1",
   timeboxingLastResetDate: "settings_timebox_last_reset_utc_v1",
+  timeboxChronoMigrated: "settings_timebox_chrono_migrated_v1",
+  timeboxingAlertedTasks: "settings_timebox_alerted_v1",
   uiTheme: STORAGE_KEY_UI_THEME,
   baseFont: "settings_base_font_v1",
   baseFontSize: "settings_base_font_size_v1",
@@ -255,6 +260,9 @@ const App = () => {
   const [waterNotifEnabled, setWaterNotifEnabled] = useState(false);
   const [waterRingtone, setWaterRingtone] = useState("beep");
 
+  const [timeBoxNotifEnabled, setTimeBoxNotifEnabled] = useState(true);
+  const [timeBoxRingtone, setTimeBoxRingtone] = useState("beep");
+
   const [songPlaylistUrl, setSongPlaylistUrl] = useState("");
   const [songAutoPlay, setSongAutoPlay] = useState(false);
   const [songCustomVideo, setSongCustomVideo] = useState(DEFAULT_SONG_CUSTOM_VIDEO);
@@ -301,6 +309,8 @@ const App = () => {
         const storedWaterGoal = data[STORAGE.waterGoalMl];
         const storedWaterNotif = data[STORAGE.waterNotifEnabled];
         const storedWaterRing = data[STORAGE.waterRingtone];
+        const storedTimeBoxNotif = data[STORAGE.timeBoxNotifEnabled];
+        const storedTimeBoxRing = data[STORAGE.timeBoxRingtone];
         const storedPlaylist = data[STORAGE.songPlaylistUrl];
         const storedAutoPlay = data[STORAGE.songAutoPlay];
         const storedCustomVideo = data[STORAGE.songCustomVideo];
@@ -311,6 +321,7 @@ const App = () => {
         let storedTimeboxGroups = data[STORAGE.timeBoxingGroups];
         const storedThemeTextIdx = data[STORAGE.themeTextColorIndex];
         const storedResetDate = data[STORAGE.timeboxingLastResetDate];
+        const storedChronoMigrated = data[STORAGE.timeboxChronoMigrated];
         const storedUiTheme = data[STORAGE.uiTheme];
         const storedBaseFont = data[STORAGE.baseFont];
         const storedBaseFontSize = data[STORAGE.baseFontSize];
@@ -334,6 +345,14 @@ const App = () => {
           } else if (!storedResetDate) {
             storageSet(STORAGE.timeboxingLastResetDate, todayUtc);
           }
+        }
+
+        // One-time: lists saved before chronological ordering existed can be in
+        // any order. Sort once, then never again so manual drag order sticks.
+        if (Array.isArray(storedTimeboxGroups) && !storedChronoMigrated) {
+          storedTimeboxGroups = sortGroupsByTime(storedTimeboxGroups);
+          storageSet(STORAGE.timeBoxingGroups, storedTimeboxGroups);
+          storageSet(STORAGE.timeboxChronoMigrated, true);
         }
 
         lastResetDateRef.current = todayUtc;
@@ -367,7 +386,7 @@ const App = () => {
         if (typeof storedThemeTextIdx === "number" && storedThemeTextIdx >= 0 && storedThemeTextIdx <= 3) {
           setThemeTextColorIndex(storedThemeTextIdx);
         }
-        if (Array.isArray(storedShortcuts) && storedShortcuts.length > 0) setShortcuts(storedShortcuts);
+        if (Array.isArray(storedShortcuts)) setShortcuts(storedShortcuts);
 
         if (storedActiveStepObj &&
           typeof storedActiveStepObj === "object" &&
@@ -388,6 +407,8 @@ const App = () => {
         if (typeof storedWaterGoal === "number" && storedWaterGoal > 0) setWaterGoalMl(storedWaterGoal);
         if (typeof storedWaterNotif === "boolean") setWaterNotifEnabled(storedWaterNotif);
         if (typeof storedWaterRing === "string") setWaterRingtone(storedWaterRing);
+        if (typeof storedTimeBoxNotif === "boolean") setTimeBoxNotifEnabled(storedTimeBoxNotif);
+        if (typeof storedTimeBoxRing === "string") setTimeBoxRingtone(storedTimeBoxRing);
         if (typeof storedPlaylist === "string") setSongPlaylistUrl(storedPlaylist);
         if (typeof storedAutoPlay === "boolean") setSongAutoPlay(storedAutoPlay);
         if (storedCustomVideo !== undefined && storedCustomVideo !== null) {
@@ -396,7 +417,7 @@ const App = () => {
           setSongCustomVideo(DEFAULT_SONG_CUSTOM_VIDEO);
         }
         if (Array.isArray(storedLofiStations) && storedLofiStations.length > 0) setLofiStations(storedLofiStations);
-        if (Array.isArray(storedTimeboxGroups) && storedTimeboxGroups.length > 0) setTimeBoxingGroups(storedTimeboxGroups);
+        if (Array.isArray(storedTimeboxGroups)) setTimeBoxingGroups(storedTimeboxGroups);
         let parsedImpTabs = storedImpTabsCfg;
         if (typeof storedImpTabsCfg === "string") {
           try { parsedImpTabs = JSON.parse(storedImpTabsCfg); } catch { parsedImpTabs = null; }
@@ -444,6 +465,8 @@ const App = () => {
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.waterGoalMl, waterGoalMl); }, [waterGoalMl]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.waterNotifEnabled, waterNotifEnabled); }, [waterNotifEnabled]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.waterRingtone, waterRingtone); }, [waterRingtone]);
+  useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.timeBoxNotifEnabled, timeBoxNotifEnabled); }, [timeBoxNotifEnabled]);
+  useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.timeBoxRingtone, timeBoxRingtone); }, [timeBoxRingtone]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.songPlaylistUrl, songPlaylistUrl); }, [songPlaylistUrl]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.songAutoPlay, songAutoPlay); }, [songAutoPlay]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.songCustomVideo, songCustomVideo); }, [songCustomVideo]);
@@ -760,6 +783,8 @@ const App = () => {
             songCustomVideo={songCustomVideo}
             lofiStations={lofiStations}
             waterGoalMl={waterGoalMl}
+            timeBoxNotifEnabled={timeBoxNotifEnabled}
+            timeBoxRingtone={timeBoxRingtone}
             streakDataSource={streakDataSource}
             githubUsername={githubUsername}
           />
@@ -840,6 +865,11 @@ const App = () => {
           onWaterNotifChange={setWaterNotifEnabled}
           waterRingtone={waterRingtone}
           onWaterRingtoneChange={setWaterRingtone}
+          // Time Boxing Alerts
+          timeBoxNotifEnabled={timeBoxNotifEnabled}
+          onTimeBoxNotifChange={setTimeBoxNotifEnabled}
+          timeBoxRingtone={timeBoxRingtone}
+          onTimeBoxRingtoneChange={setTimeBoxRingtone}
           // Song Player
           showSongPlayer={showSongPlayer}
           onShowSongPlayerChange={setShowSongPlayer}

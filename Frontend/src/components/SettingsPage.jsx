@@ -13,8 +13,16 @@ import {
 } from "./iconData.js";
 import { IconDropdownPopover } from "./IconPicker.jsx";
 import { TimeDropdownPopover } from "./TimePicker.jsx";
+import {
+  insertGroupByTime,
+  moveItem,
+  setGroupTimeOrdered,
+} from "../utils/timeBoxOrder.js";
+import { useFlipReorder } from "../hooks/useFlipReorder.js";
 
 /* ─── Ringtone helpers ─── */
+const RINGTONE_CHIME = "/sounds/timebox-chime.mp3";
+
 const playBeep = () => {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -46,6 +54,8 @@ const playCustomRingtone = (dataUrl) => {
 const previewRingtone = (ringtone) => {
   if (!ringtone || ringtone === "beep") {
     playBeep();
+  } else if (ringtone === RINGTONE_CHIME) {
+    playCustomRingtone(RINGTONE_CHIME);
   } else {
     playCustomRingtone(ringtone);
   }
@@ -154,7 +164,7 @@ const CardContainer = ({ title, description, children, action, overflowVisible =
 /* ─── Ringtone Selector Component ─── */
 const RingtoneRow = ({ label, value, onChange }) => {
   const fileRef = useRef(null);
-  const hasCustom = value && value !== "beep";
+  const hasCustom = value && value !== "beep" && value !== RINGTONE_CHIME;
 
   const handleFile = (e) => {
     const file = e.target.files?.[0];
@@ -171,6 +181,9 @@ const RingtoneRow = ({ label, value, onChange }) => {
       <div className="flex items-center gap-2">
         <Pill active={!value || value === "beep"} onClick={() => onChange("beep")}>
           Default Beep
+        </Pill>
+        <Pill active={value === RINGTONE_CHIME} onClick={() => onChange(RINGTONE_CHIME)}>
+          Chime
         </Pill>
         <input ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={handleFile} />
         <Pill active={hasCustom} onClick={() => fileRef.current?.click()}>
@@ -1106,6 +1119,8 @@ const FocusTab = ({
   waterGoalMl, onWaterGoalChange,
   waterNotifEnabled, onWaterNotifChange,
   waterRingtone, onWaterRingtoneChange,
+  timeBoxNotifEnabled, onTimeBoxNotifChange,
+  timeBoxRingtone, onTimeBoxRingtoneChange,
 }) => (
   <div className="flex flex-col gap-6">
     {/* Focus Timer */}
@@ -1126,6 +1141,28 @@ const FocusTab = ({
           <div className="flex flex-col gap-3.5 pl-3.5 border-l-2 border-white/20 my-1 pt-1">
             <RingtoneRow label="Focus Session Completion Ringtone" value={focusEndRingtone} onChange={onFocusEndRingtoneChange} />
             <RingtoneRow label="Rest Session Completion Ringtone" value={restEndRingtone} onChange={onRestEndRingtoneChange} />
+          </div>
+        )}
+      </div>
+    </CardContainer>
+
+    {/* Time Boxing */}
+    <CardContainer
+      title="Time Boxing Settings"
+      description="Configure audio alerts for your scheduled main tasks in the Time Boxing routine."
+    >
+      <div className="flex flex-col gap-3.5 pt-3 border-t border-white/10">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-white text-xs font-gilroy-bold">Audio Sound Alerts For Main Tasks</h4>
+            <p className="text-white/50 text-[11px] font-gilroy-medium">Play a beep when a main task's assigned time arrives</p>
+          </div>
+          <Toggle checked={timeBoxNotifEnabled} onChange={onTimeBoxNotifChange} />
+        </div>
+
+        {timeBoxNotifEnabled && (
+          <div className="flex flex-col gap-3.5 pl-3.5 border-l-2 border-white/20 my-1 pt-1">
+            <RingtoneRow label="Main Task Start Alert Ringtone" value={timeBoxRingtone} onChange={onTimeBoxRingtoneChange} />
           </div>
         )}
       </div>
@@ -1871,16 +1908,49 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
 
   const anyPickerOpen = timePickerGroupId !== null || iconPickerGroupId !== null;
 
+  // Set right before a time-driven reorder so the FLIP effect animates it
+  const animateReorderRef = useRef(false);
+  const registerCard = useFlipReorder(
+    (timeBoxingGroups || []).map((g) => g.id).join("|"),
+    animateReorderRef,
+  );
+
+  useEffect(() => {
+    const resetStaleDrag = () => {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      setDraggedSubtask(null);
+      setDragOverSubtask(null);
+    };
+    const onWindowBlur = () => resetStaleDrag();
+    const onWindowFocus = () => resetStaleDrag();
+    window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("focus", onWindowFocus);
+    return () => {
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("focus", onWindowFocus);
+    };
+  }, []);
+
   const addGroup = () => {
     const g = { id: makeId(), title: "New Routine", iconClass: "ri-briefcase-line", time: "9:00 am", streak: 0, subtasks: [] };
-    onTimeBoxingGroupsChange([...timeBoxingGroups, g]);
+    animateReorderRef.current = true;
+    onTimeBoxingGroupsChange(insertGroupByTime(timeBoxingGroups, g));
     setExpandedGroupId(g.id);
   };
 
   const removeGroup = (id) => onTimeBoxingGroupsChange(timeBoxingGroups.filter((g) => g.id !== id));
 
-  const updateGroup = (id, patch) =>
+  const updateGroup = (id, patch) => {
+    // A time edit re-inserts the card at its chronological slot; every other
+    // patch is a plain in-place update.
+    if (patch && Object.prototype.hasOwnProperty.call(patch, "time")) {
+      animateReorderRef.current = true;
+      onTimeBoxingGroupsChange(setGroupTimeOrdered(timeBoxingGroups, id, patch.time));
+      return;
+    }
     onTimeBoxingGroupsChange(timeBoxingGroups.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+  };
 
   const handleDragStart = (e, index) => {
     setDraggedIdx(index);
@@ -1897,16 +1967,18 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
   const handleDrop = (e, targetIdx) => {
     e.preventDefault();
     if (draggedIdx !== null && draggedIdx !== targetIdx) {
-      const reordered = [...timeBoxingGroups];
-      const [movedItem] = reordered.splice(draggedIdx, 1);
-      reordered.splice(targetIdx, 0, movedItem);
-      onTimeBoxingGroupsChange(reordered);
+      onTimeBoxingGroupsChange(moveItem(timeBoxingGroups, draggedIdx, targetIdx));
     }
     setDraggedIdx(null);
     setDragOverIdx(null);
   };
 
   const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const handleDragCancel = () => {
     setDraggedIdx(null);
     setDragOverIdx(null);
   };
@@ -1972,11 +2044,16 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
     setDragOverSubtask(null);
   };
 
+  const handleSubtaskDragCancel = () => {
+    setDraggedSubtask(null);
+    setDragOverSubtask(null);
+  };
+
   return (
     <CardContainer
       overflowVisible={anyPickerOpen}
       title="Time Boxing Routine Editor"
-      description="Structure your daily routines into scheduled task blocks with subtask checklists. Drag task cards up or down to reorder them."
+      description="Structure your daily routines into scheduled task blocks with subtask checklists. Drag task cards to reorder them manually, or change a start time and the card jumps to its chronological slot."
     >
       <div className="flex flex-col gap-4 pt-3 border-t border-white/10">
         <div className="flex flex-col gap-4">
@@ -1987,11 +2064,13 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
             return (
               <div
                 key={group.id}
+                ref={(el) => registerCard(group.id, el)}
                 draggable
                 onDragStart={(e) => handleDragStart(e, idx)}
                 onDragOver={(e) => handleDragOver(e, idx)}
                 onDrop={(e) => handleDrop(e, idx)}
                 onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
                 className={`bg-black/25 border rounded-2xl transition-all shadow-sm relative ${
                   (timePickerGroupId === group.id || iconPickerGroupId === group.id) ? "z-30 overflow-visible" : "z-10 overflow-hidden"
                 } ${
@@ -2007,7 +2086,7 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
                   <div className="flex items-center shrink-0">
                     <div
                       className="h-10 w-7 flex items-center justify-center text-white/40 hover:text-white cursor-grab active:cursor-grabbing transition-colors"
-                      title="Drag to reorder routine tasks"
+                      title="Drag to reorder routine tasks (or edit the time to re-sort)"
                     >
                       <i className="ri-drag-move-fill text-lg" />
                     </div>
@@ -2129,6 +2208,7 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
                             handleSubtaskDrop(e, group.id, stIdx)
                           }
                           onDragEnd={handleSubtaskDragEnd}
+                          onDragCancel={handleSubtaskDragCancel}
                           className={`flex items-center gap-2.5 rounded-xl transition-all ${
                             stDragging
                               ? "opacity-40"
@@ -2544,9 +2624,9 @@ const BackupTab = ({ uiTheme }) => {
             <button
               type="button"
               onClick={() => setShowConfirmReset(true)}
-              className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-gilroy-bold text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-gilroy-bold text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shadow-md"
             >
-              <i className="ri-refresh-line text-xs" />
+              <i className="ri-refresh-line text-sm" />
               <span>Reset to Defaults</span>
             </button>
           ) : (
@@ -2555,14 +2635,14 @@ const BackupTab = ({ uiTheme }) => {
                 type="button"
                 onClick={handleResetData}
                 disabled={isResetting}
-                className="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-gilroy-bold text-white bg-rose-600 hover:bg-rose-700 transition-all cursor-pointer active:scale-95 shadow-md disabled:opacity-50"
+                className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl text-xs font-gilroy-bold text-white bg-rose-600 hover:bg-rose-700 transition-all cursor-pointer active:scale-95 shadow-md disabled:opacity-50"
               >
                 {isResetting ? "Resetting..." : "Confirm Reset"}
               </button>
               <button
                 type="button"
                 onClick={() => setShowConfirmReset(false)}
-                className="px-3 py-2 rounded-xl text-xs font-gilroy-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/15 transition-all cursor-pointer"
+                className="px-4 py-2.5 rounded-xl text-xs font-gilroy-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/15 transition-all cursor-pointer"
               >
                 Cancel
               </button>
@@ -2725,6 +2805,10 @@ const SettingsPage = (props) => {
                 onWaterNotifChange={props.onWaterNotifChange}
                 waterRingtone={props.waterRingtone}
                 onWaterRingtoneChange={props.onWaterRingtoneChange}
+                timeBoxNotifEnabled={props.timeBoxNotifEnabled}
+                onTimeBoxNotifChange={props.onTimeBoxNotifChange}
+                timeBoxRingtone={props.timeBoxRingtone}
+                onTimeBoxRingtoneChange={props.onTimeBoxRingtoneChange}
               />
             )}
 

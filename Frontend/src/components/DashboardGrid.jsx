@@ -539,17 +539,99 @@ const DraggableWidget = ({
     [attributes, listeners],
   );
 
+  const [introHint, setIntroHint] = useState(false);
+  const introShownRef = useRef(false);
+  const widgetRef = useRef(null);
+  const hideTimerRef = useRef(null);
+  const bottomRef = useRef(null);
+  const topRef = useRef(null);
+  const rightRef = useRef(null);
+  const leftRef = useRef(null);
+  const currentSideRef = useRef(null);
+
+  const setHandleVis = (el, show) => {
+    if (!el) return;
+    el.style.opacity = show ? "1" : "0";
+    el.style.pointerEvents = show ? "auto" : "none";
+  };
+
+  const applySide = useCallback((side) => {
+    if (currentSideRef.current === side) return;
+    currentSideRef.current = side;
+    setHandleVis(bottomRef.current, side === "bottom");
+    setHandleVis(topRef.current, side === "top");
+    setHandleVis(rightRef.current, side === "right");
+    setHandleVis(leftRef.current, side === "left");
+  }, []);
+
+  const applyIntroAll = useCallback((show) => {
+    const v = show ? "1" : "0";
+    const pe = show ? "auto" : "none";
+    [bottomRef, topRef, rightRef, leftRef].forEach((r) => {
+      if (r.current) { r.current.style.opacity = v; r.current.style.pointerEvents = pe; }
+    });
+  }, []);
+
+  const handlePointerMove = useCallback((e) => {
+    if (introHint) return;
+    const el = widgetRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const edgeThreshold = 28;
+    let side = null;
+    if (y <= edgeThreshold) side = "top";
+    else if (y >= rect.height - edgeThreshold) side = "bottom";
+    else if (x <= edgeThreshold) side = "left";
+    else if (x >= rect.width - edgeThreshold) side = "right";
+    applySide(side);
+  }, [introHint, applySide]);
+
+  const handlePointerEnter = useCallback(() => {
+    if (hideTimerRef.current) { clearTimeout(hideTimerRef.current); hideTimerRef.current = null; }
+    if (!introShownRef.current) {
+      introShownRef.current = true;
+      setIntroHint(true);
+      applyIntroAll(true);
+      hideTimerRef.current = setTimeout(() => {
+        setIntroHint(false);
+        applyIntroAll(false);
+        currentSideRef.current = null;
+        hideTimerRef.current = null;
+      }, 1800);
+    }
+  }, [applyIntroAll]);
+
+  const handlePointerLeave = useCallback(() => {
+    if (introHint && hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+      setIntroHint(false);
+      applyIntroAll(false);
+      currentSideRef.current = null;
+    } else if (!introHint) {
+      applySide(null);
+    }
+  }, [introHint, applyIntroAll, applySide]);
+
+  useEffect(() => () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); }, []);
+
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => { setNodeRef(node); widgetRef.current = node; }}
       className={`grid-widget group/widget ${isDragging ? "grid-widget--dragging" : ""}`}
       style={style}
+      onPointerEnter={handlePointerEnter}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
     >
       {renderWidget(id, dragHandleProps)}
 
       {/* Bottom Resizable Handle (Height / Rows) */}
       {config.resizable && config.minRows !== config.maxRows && (
         <div
+          ref={bottomRef}
           data-resize-handle
           onPointerDown={(e) => onStartResizeRows(id, e)}
           className="absolute bottom-1 left-1/2 -translate-x-1/2 w-14 h-3.5 opacity-0 pointer-events-none group-hover/widget:opacity-100 group-hover/widget:pointer-events-auto transition-all duration-200 cursor-ns-resize z-30 flex items-center justify-center group/handle"
@@ -562,9 +644,24 @@ const DraggableWidget = ({
         </div>
       )}
 
+      {/* Top Resizable Handle (Height / Rows, shift origin) */}
+      {config.resizable && config.minRows !== config.maxRows && (
+        <div
+          ref={topRef}
+          data-resize-handle-top
+          onPointerDown={(e) => onStartResizeRows(id, e, true)}
+          className="absolute top-1 left-1/2 -translate-x-1/2 w-12 h-2 rounded-full bg-white/30 hover:bg-white/70 active:bg-white/90 pointer-events-none transition-colors duration-150 cursor-ns-resize z-30 flex items-center justify-center group/handle"
+          style={{ opacity: 0 }}
+          title="Drag up to expand height"
+        >
+          <div className="w-4 h-0.5 rounded-full bg-white/60 group-hover/handle:bg-white" />
+        </div>
+      )}
+
       {/* Right Resizable Handle (Width / Cols) */}
       {config.resizable && (config.minCols ?? config.cols) !== (config.maxCols ?? config.cols) && (
         <div
+          ref={rightRef}
           data-resize-handle-cols
           onPointerDown={(e) => onStartResizeCols(id, e)}
           className="absolute right-1 top-1/2 -translate-y-1/2 w-3.5 h-14 opacity-0 pointer-events-none group-hover/widget:opacity-100 group-hover/widget:pointer-events-auto transition-all duration-200 cursor-ew-resize z-30 flex items-center justify-center group/handle"
@@ -580,6 +677,7 @@ const DraggableWidget = ({
       {/* Left Resizable Handle (Width / Cols) */}
       {config.resizable && (config.minCols ?? config.cols) !== (config.maxCols ?? config.cols) && (
         <div
+          ref={leftRef}
           data-resize-handle-cols
           onPointerDown={(e) => onStartResizeCols(id, e, true)}
           className="absolute left-1 top-1/2 -translate-y-1/2 w-3.5 h-14 opacity-0 pointer-events-none group-hover/widget:opacity-100 group-hover/widget:pointer-events-auto transition-all duration-200 cursor-ew-resize z-30 flex items-center justify-center group/handle"
@@ -613,6 +711,8 @@ const DashboardGrid = ({
   songCustomVideo,
   lofiStations,
   waterGoalMl,
+  timeBoxNotifEnabled = true,
+  timeBoxRingtone = "beep",
   streakDataSource = "local",
   githubUsername = "",
 }) => {
@@ -785,7 +885,7 @@ const DashboardGrid = ({
 
   /* ── Vertical Resizing Logic (Rows) ── */
   const handleStartResizeRows = useCallback(
-    (widgetId, e) => {
+    (widgetId, e, fromTop = false) => {
       e.preventDefault();
       e.stopPropagation();
       if (e.nativeEvent && typeof e.nativeEvent.stopImmediatePropagation === "function") {
@@ -806,15 +906,25 @@ const DashboardGrid = ({
       const widgetRect = widgetEl.getBoundingClientRect();
       const gridRect = gridRef.current.getBoundingClientRect();
       const cellHeight = gridRect.height / gridRows;
+      const origPos = positionsRef.current[widgetId];
+      const origRow = origPos ? origPos.row : 1;
+      const origRows = origPos ? (origPos.rows || widgetConfigs[widgetId]?.defaultRows || 1) : 1;
+      const bottomPx = widgetRect.bottom;
 
       const onMove = (moveEv) => {
-        const currentY = moveEv.clientY;
-        const relY = currentY - widgetRect.top;
         const cfg = widgetConfigs[widgetId];
-        const targetRows = Math.max(
-          cfg.minRows,
-          Math.min(cfg.maxRows, Math.max(1, Math.round(relY / cellHeight))),
-        );
+        let targetRows;
+        if (fromTop) {
+          const heightPx = Math.max(cellHeight * cfg.minRows, bottomPx - moveEv.clientY);
+          targetRows = Math.max(cfg.minRows, Math.min(cfg.maxRows, Math.max(1, Math.round(heightPx / cellHeight))));
+        } else {
+          const relY = moveEv.clientY - widgetRect.top;
+          targetRows = Math.max(cfg.minRows, Math.min(cfg.maxRows, Math.max(1, Math.round(relY / cellHeight))));
+        }
+
+        const targetRow = fromTop
+          ? Math.max(1, origRow + (origRows - targetRows))
+          : origRow;
 
         const currentPos = positionsRef.current[widgetId];
         if (
@@ -822,7 +932,7 @@ const DashboardGrid = ({
           canPlace(
             widgetId,
             currentPos.col,
-            currentPos.row,
+            targetRow,
             positionsRef.current,
             activeRef.current,
             gridCols,
@@ -834,7 +944,7 @@ const DashboardGrid = ({
         ) {
           setPositions((prev) => ({
             ...prev,
-            [widgetId]: { ...prev[widgetId], rows: targetRows },
+            [widgetId]: { ...prev[widgetId], row: targetRow, rows: targetRows },
           }));
         }
       };
@@ -1186,6 +1296,8 @@ const DashboardGrid = ({
               dragHandleProps={dragHandleProps}
               externalGroups={timeBoxingGroups}
               onGroupsChange={onTimeBoxingGroupsChange}
+              notifEnabled={timeBoxNotifEnabled}
+              ringtone={timeBoxRingtone}
             />
           </WidgetErrorBoundary>
         );

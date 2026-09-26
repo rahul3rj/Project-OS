@@ -24,38 +24,58 @@ const Clock = ({ isDashboard = false }) => {
 
   useEffect(() => {
     let active = true
+    let retryTimeout = null
 
-    const fetchWeather = async (lat, lon) => {
-      try {
-        const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`
-        )
-        const data = await res.json()
-        if (data?.current_weather && active) {
-          const temp = Math.round(data.current_weather.temperature)
-          const emoji = weatherCodeToEmoji(data.current_weather.weathercode)
-          setWeather({ temp, emoji, loaded: true })
+    const WEATHER_URL = 'https://api.open-meteo.com/v1/forecast'
+
+    const fetchWeather = async (lat, lon, retries = 3) => {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          const controller = new AbortController()
+          const timer = setTimeout(() => controller.abort(), 8000)
+          const res = await fetch(
+            `${WEATHER_URL}?latitude=${lat}&longitude=${lon}&current_weather=true`,
+            { signal: controller.signal }
+          )
+          clearTimeout(timer)
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const data = await res.json()
+          if (data?.current_weather && active) {
+            const temp = Math.round(data.current_weather.temperature)
+            const emoji = weatherCodeToEmoji(data.current_weather.weathercode)
+            setWeather({ temp, emoji, loaded: true })
+          }
+          return
+        } catch {
+          if (!active) return
+          if (attempt < retries) {
+            await new Promise(r => { retryTimeout = setTimeout(r, 2000 * attempt) })
+          }
         }
-      } catch (err) {
-        console.warn('Weather fetch failed, using fallback:', err)
       }
     }
 
+    const fallbackCoords = { lat: 28.6139, lon: 77.209 }
+
+    const gotPosition = (pos) => {
+      if (!active) return
+      fetchWeather(pos.coords.latitude, pos.coords.longitude)
+    }
+
+    const useFallback = () => {
+      if (!active) return
+      fetchWeather(fallbackCoords.lat, fallbackCoords.lon)
+    }
+
     if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (!active) return
-          fetchWeather(pos.coords.latitude, pos.coords.longitude)
-        },
-        () => {
-          fetchWeather(28.6139, 77.209)
-        },
-        { timeout: 8000 }
-      )
+      navigator.geolocation.getCurrentPosition(gotPosition, useFallback, { timeout: 8000 })
+    } else {
+      useFallback()
     }
 
     return () => {
       active = false
+      if (retryTimeout) clearTimeout(retryTimeout)
     }
   }, [])
 
@@ -100,7 +120,7 @@ const Clock = ({ isDashboard = false }) => {
         {/* Bottom Date & Live Weather - 2nd darkest theme color */}
         <div
           className='flex items-center gap-4 mt-[5vh] text-lg font-medium drop-shadow-md pl-1 font-gilroy-medium w-full justify-between'
-          style={{ color: 'var(--theme-3, #334155)' }}
+          style={{ color: 'var(--theme-1, #CBD5E1)' }}
         >
           <span>{bottomDateStr}</span>
           <div className='flex items-center gap-1.5 px-3 py-1 text-lg'>
