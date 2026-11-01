@@ -68,6 +68,25 @@ export const insertGroupByTime = (groups, group) => {
 };
 
 /**
+ * Clones a routine for a different weekday set: fresh ids, cleared completion,
+ * same time / icon / subtasks so the copy can be edited independently.
+ */
+export const duplicateRoutine = (group, makeId) => ({
+  ...group,
+  id: makeId(),
+  title: group.title ? `${group.title} (copy)` : "New Routine",
+  streak: 0,
+  baseStreak: 0,
+  days: Array.isArray(group.days) ? [...group.days] : [],
+  subtasks: (group.subtasks || []).map((subtask) => ({
+    ...subtask,
+    id: makeId(),
+    done: false,
+    completedOn: null,
+  })),
+});
+
+/**
  * Applies a new time to an existing main task and re-inserts that card at the
  * slot its new time belongs to. Other cards keep their current relative order.
  */

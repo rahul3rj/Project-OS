@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { updateTodayCompletedTasksCount } from "../utils/activityStore";
 import { storageGet, storageSet } from "../utils/storage.js";
 import {
+  duplicateRoutine,
   insertGroupByTime,
   moveItem,
   parseTimeToMinutes,
@@ -10,6 +11,8 @@ import {
 import { useFlipReorder } from "../hooks/useFlipReorder.js";
 import { IconDropdownPopover } from "./IconPicker.jsx";
 import { TimeDropdownPopover } from "./TimePicker.jsx";
+import { formatDays, isScheduledOn } from "../utils/weekdays.js";
+import WeekdayPicker from "./WeekdayPicker.jsx";
 
 const ALERTED_STORAGE_KEY = "settings_timebox_alerted_v1";
 
@@ -134,6 +137,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
   const [timePickerGroupId, setTimePickerGroupId] = useState(null);
   const [, setAtBottom] = useState(true);
   const [nowMinutes, setNowMinutes] = useState(getNowMinutes);
+  const [todayWeekday, setTodayWeekday] = useState(() => new Date().getDay());
   // Card to reveal after it moves (time edit / new task), keeps it on screen.
   const [focusGroupId, setFocusGroupId] = useState(null);
 
@@ -173,12 +177,37 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
   }, []);
 
   // Use externalGroups when provided (always the case from DashboardGrid)
-  const groups = useMemo(() => {
+  const allGroups = useMemo(() => {
     if (Array.isArray(externalGroups)) {
       return externalGroups;
     }
     return DEFAULT_TASK_GROUPS;
   }, [externalGroups]);
+
+  // Only routines scheduled for today's weekday are shown / alerted / expanded.
+  const scheduledGroups = useMemo(
+    () => allGroups.filter((g) => isScheduledOn(g.days, todayWeekday)),
+    [allGroups, todayWeekday],
+  );
+
+  // Keep the routine being edited on screen even after its last today-day is
+  // unticked; otherwise it would vanish mid-edit. It leaves on collapse.
+  const groups = useMemo(
+    () =>
+      allGroups.filter(
+        (g) => isScheduledOn(g.days, todayWeekday) || g.id === expandedId,
+      ),
+    [allGroups, todayWeekday, expandedId],
+  );
+
+  // Streak/activity only counts routines that are actually scheduled today.
+  const countCompletedScheduled = (list) =>
+    list.filter(
+      (g) =>
+        isScheduledOn(g.days, todayWeekday) &&
+        g.subtasks?.length > 0 &&
+        g.subtasks.every((s) => s.done),
+    ).length;
 
   // Subtle slide when a card is re-sorted because its time changed
   const registerCard = useFlipReorder(
@@ -210,7 +239,10 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
   }, []);
 
   useEffect(() => {
-    const id = setInterval(() => setNowMinutes(getNowMinutes()), 10000);
+    const id = setInterval(() => {
+      setNowMinutes(getNowMinutes());
+      setTodayWeekday(new Date().getDay());
+    }, 10000);
     return () => clearInterval(id);
   }, []);
 
@@ -256,7 +288,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
     // its start time so none of them chime retroactively (covers first ever
     // load, reloads, refreshes, and mid-day storage clears).
     if (!alertedInitializedRef.current) {
-      for (const g of groups || []) {
+      for (const g of scheduledGroups || []) {
         const start = parseTimeToMinutes(g.time);
         if (start !== null && start <= now) alertedRef.current.ids.add(g.id);
       }
@@ -271,7 +303,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
     if (!notifEnabled) return;
 
     let changed = false;
-    for (const g of groups || []) {
+    for (const g of scheduledGroups || []) {
       const start = parseTimeToMinutes(g.time);
       if (start === null || alertedRef.current.ids.has(g.id)) continue;
       if (start <= now) {
@@ -286,17 +318,17 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
         ids: [...alertedRef.current.ids],
       });
     }
-  }, [nowMinutes, groups, notifEnabled, ringtone, externalGroups]);
+  }, [nowMinutes, scheduledGroups, notifEnabled, ringtone, externalGroups]);
 
   const activeId = useMemo(() => {
-    if (!groups || groups.length === 0) return null;
+    if (!scheduledGroups || scheduledGroups.length === 0) return null;
 
     let bestActiveGroup = null;
     let maxPastStart = -1;
     let earliestGroup = null;
     let minStart = Infinity;
 
-    for (const g of groups) {
+    for (const g of scheduledGroups) {
       const start = parseTimeToMinutes(g.time);
       if (start !== null) {
         if (start < minStart) {
@@ -316,17 +348,18 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
     if (earliestGroup) {
       return earliestGroup.id;
     }
-    return groups[0]?.id || null;
-  }, [groups, nowMinutes]);
+    return scheduledGroups[0]?.id || null;
+  }, [scheduledGroups, nowMinutes]);
 
   // Default to expanding the current active task relevant to time
   useEffect(() => {
-    if (!activeId) return;
-    const frameId = requestAnimationFrame(() => setExpandedId(activeId));
+    const frameId = requestAnimationFrame(() => setExpandedId(activeId || null));
     return () => cancelAnimationFrame(frameId);
   }, [activeId]);
 
-  // Auto-scroll active task to center on page load / refresh or activeId change
+  // Auto-scroll the active routine to the vertical center on load, refresh,
+  // when the active card changes with the clock, and when the weekday filter
+  // swaps today's routine set at midnight.
   useEffect(() => {
     if (!activeId) return;
 
@@ -351,7 +384,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [activeId]);
+  }, [activeId, todayWeekday]);
 
   // Reveal a card that just moved (time edit or newly created task)
   useEffect(() => {
@@ -371,7 +404,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
   }, [focusGroupId]);
 
   const toggleSubtask = (groupId, subtaskId) => {
-    const nextGroups = groups.map((g) =>
+    const nextGroups = allGroups.map((g) =>
       g.id !== groupId
         ? g
         : {
@@ -386,15 +419,13 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
       onGroupsChange(nextGroups);
     }
 
-    const completedMainCount = nextGroups.filter(
-      (g) => g.subtasks && g.subtasks.length > 0 && g.subtasks.every((s) => s.done),
-    ).length;
+    const completedMainCount = countCompletedScheduled(nextGroups);
 
     updateTodayCompletedTasksCount(completedMainCount);
   };
 
   const removeSubtask = (groupId, subtaskId) => {
-    const nextGroups = groups.map((g) =>
+    const nextGroups = allGroups.map((g) =>
       g.id !== groupId
         ? g
         : {
@@ -407,24 +438,20 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
       onGroupsChange(nextGroups);
     }
 
-    const completedMainCount = nextGroups.filter(
-      (g) => g.subtasks && g.subtasks.length > 0 && g.subtasks.every((s) => s.done),
-    ).length;
+    const completedMainCount = countCompletedScheduled(nextGroups);
 
     updateTodayCompletedTasksCount(completedMainCount);
   };
 
   const removeGroup = (groupId) => {
-    const nextGroups = groups.filter((g) => g.id !== groupId);
+    const nextGroups = allGroups.filter((g) => g.id !== groupId);
     if (focusGroupId === groupId) setFocusGroupId(null);
 
     if (typeof onGroupsChange === "function") {
       onGroupsChange(nextGroups);
     }
 
-    const completedMainCount = nextGroups.filter(
-      (g) => g.subtasks && g.subtasks.length > 0 && g.subtasks.every((s) => s.done),
-    ).length;
+    const completedMainCount = countCompletedScheduled(nextGroups);
 
     updateTodayCompletedTasksCount(completedMainCount);
     if (editingGroup === groupId) {
@@ -437,7 +464,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
   };
 
   const reorderSubtask = (groupId, fromId, toId) => {
-    const nextGroups = groups.map((g) => {
+    const nextGroups = allGroups.map((g) => {
       if (g.id !== groupId) return g;
       const subtasks = [...(g.subtasks || [])];
       const fromIndex = subtasks.findIndex((s) => s.id === fromId);
@@ -453,7 +480,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
   const addSubtask = (groupId) => {
     const text = newSubtaskText.trim();
     if (!text) return;
-    const nextGroups = groups.map((g) =>
+    const nextGroups = allGroups.map((g) =>
       g.id === groupId
         ? { ...g, subtasks: [...(g.subtasks || []), { id: makeId(), text, done: false }] }
         : g,
@@ -473,7 +500,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
       removeSubtask(groupId, subtaskId);
     } else {
       onGroupsChange?.(
-        groups.map((g) =>
+        allGroups.map((g) =>
           g.id === groupId
             ? { ...g, subtasks: (g.subtasks || []).map((s) => s.id === subtaskId ? { ...s, text } : s) }
             : g,
@@ -497,7 +524,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
   const saveEditGroup = (groupId) => {
     const title = editGroupTitle.trim();
     if (title) {
-      onGroupsChange?.(groups.map((g) => g.id === groupId ? { ...g, title } : g));
+      onGroupsChange?.(allGroups.map((g) => g.id === groupId ? { ...g, title } : g));
     }
     setEditingGroup(null);
     setEditGroupTitle("");
@@ -508,11 +535,29 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
     setEditGroupTitle("");
   };
 
+  const updateGroupDays = (groupId, days) => {
+    onGroupsChange?.(
+      allGroups.map((g) => (g.id === groupId ? { ...g, days } : g)),
+    );
+  };
+
+  const duplicateGroup = (groupId) => {
+    const sourceIndex = allGroups.findIndex((g) => g.id === groupId);
+    if (sourceIndex === -1) return;
+    const copy = duplicateRoutine(allGroups[sourceIndex], makeId);
+    const nextGroups = [...allGroups];
+    nextGroups.splice(sourceIndex + 1, 0, copy);
+    animateReorderRef.current = true;
+    onGroupsChange?.(nextGroups);
+    setExpandedId(copy.id);
+    setFocusGroupId(copy.id);
+  };
+
   const updateGroupTime = (groupId, newTime) => {
     if (!newTime) return;
     // A time edit wins over the manual order: the card jumps to the slot its
     // new start time belongs to, other cards keep their relative order.
-    onGroupsChange?.(setGroupTimeOrdered(groups, groupId, newTime));
+    onGroupsChange?.(setGroupTimeOrdered(allGroups, groupId, newTime));
     animateReorderRef.current = true;
     setFocusGroupId(groupId);
     setTimePickerGroupId(null);
@@ -552,7 +597,15 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
 
   const reorderGroups = (fromIndex, toIndex) => {
     if (fromIndex === toIndex) return;
-    onGroupsChange?.(moveItem(groups, fromIndex, toIndex));
+    // Indices come from the visible (today-only) list, so map them back to the
+    // full list before reordering to avoid dropping hidden routines.
+    const fromId = groups[fromIndex]?.id;
+    const toId = groups[toIndex]?.id;
+    if (!fromId || !toId) return;
+    const from = allGroups.findIndex((g) => g.id === fromId);
+    const to = allGroups.findIndex((g) => g.id === toId);
+    if (from === -1 || to === -1) return;
+    onGroupsChange?.(moveItem(allGroups, from, to));
   };
 
   const handleGroupDragStart = (event, index) => {
@@ -594,6 +647,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
       title: "",
       iconClass: "ri-briefcase-line",
       time: initialTime,
+      days: [],
       subtasks: [],
     });
     setDraftSubtaskText("");
@@ -648,10 +702,11 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
       iconClass: draftNewTask.iconClass || "ri-briefcase-line",
       time: draftNewTask.time || formatCurrentTime(),
       streak: 0,
+      days: draftNewTask.days || [],
       subtasks: draftNewTask.subtasks || [],
     };
 
-    const nextGroups = insertGroupByTime(groups, newGroup);
+    const nextGroups = insertGroupByTime(allGroups, newGroup);
     if (typeof onGroupsChange === "function") {
       animateReorderRef.current = true;
       onGroupsChange(nextGroups);
@@ -707,6 +762,17 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
         style={(timePickerGroupId || iconPickerGroupId) ? { overflow: "visible" } : undefined}
       >
         <div className="flex flex-col">
+          {groups.length === 0 && !draftNewTask && (
+            <div className="flex flex-col items-center justify-center gap-1 py-8 text-center text-white/45">
+              <i className="ri-calendar-2-line text-xl"></i>
+              <p className="text-xs font-gilroy-medium">
+                Nothing scheduled for today.
+              </p>
+              <p className="text-[10px]">
+                Set weekdays on a routine in Settings to see it here.
+              </p>
+            </div>
+          )}
           {groups.map((group, index) => {
             const total = group.subtasks?.length || 0;
             const done = (group.subtasks || []).filter((s) => s.done).length;
@@ -816,27 +882,57 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
                             {group.title}
                           </h3>
                         )}
-                        {expanded && (
-                          <button
-                            type="button"
-                            draggable={false}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              removeGroup(group.id);
-                            }}
-                            aria-label={`Delete ${group.title || "main task"}`}
-                            title="Delete main task"
-                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all duration-200 active:scale-95 cursor-pointer ${
-                              active
-                                ? "text-[color:var(--theme-4,#0F172A)] opacity-80 hover:bg-black/10 hover:opacity-100"
-                                : "text-white/60 opacity-70 hover:bg-red-500/20 hover:text-red-300 hover:opacity-100"
-                            }`}
+                        {formatDays(group.days) && (
+                          <span
+                            className="shrink-0 text-[9px] opacity-60"
+                            title={`Repeats: ${formatDays(group.days)}`}
                           >
-                            <i
-                              className="ri-delete-bin-6-line text-sm"
-                              style={active ? { color: "var(--theme-4, #0F172A)" } : undefined}
-                            />
-                          </button>
+                            {formatDays(group.days)}
+                          </span>
+                        )}
+                        {expanded && (
+                          <>
+                            <button
+                              type="button"
+                              draggable={false}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                duplicateGroup(group.id);
+                              }}
+                              aria-label={`Duplicate ${group.title || "main task"}`}
+                              title="Duplicate routine (then change its days)"
+                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all duration-200 active:scale-95 cursor-pointer ${
+                                active
+                                  ? "text-[color:var(--theme-4,#0F172A)] opacity-80 hover:bg-black/10 hover:opacity-100"
+                                  : "text-white/60 opacity-70 hover:bg-white/10 hover:text-white hover:opacity-100"
+                              }`}
+                            >
+                              <i
+                                className="ri-file-copy-line text-sm"
+                                style={active ? { color: "var(--theme-4, #0F172A)" } : undefined}
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              draggable={false}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                removeGroup(group.id);
+                              }}
+                              aria-label={`Delete ${group.title || "main task"}`}
+                              title="Delete main task"
+                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all duration-200 active:scale-95 cursor-pointer ${
+                                active
+                                  ? "text-[color:var(--theme-4,#0F172A)] opacity-80 hover:bg-black/10 hover:opacity-100"
+                                  : "text-white/60 opacity-70 hover:bg-red-500/20 hover:text-red-300 hover:opacity-100"
+                              }`}
+                            >
+                              <i
+                                className="ri-delete-bin-6-line text-sm"
+                                style={active ? { color: "var(--theme-4, #0F172A)" } : undefined}
+                              />
+                            </button>
+                          </>
                         )}
                       </div>
 
@@ -904,6 +1000,17 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
                           <span className="text-[11px]">{displayStreak}</span>
                         </span>
                       </div>
+
+                      {expanded && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <i className="ri-calendar-2-line text-[11px] opacity-70"></i>
+                          <WeekdayPicker
+                            value={group.days}
+                            onChange={(days) => updateGroupDays(group.id, days)}
+                            className="opacity-90"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Expanded Subtask Tree (Read-only checklist) */}
@@ -1199,6 +1306,17 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, notifEnab
                       }}
                       placeholder="Routine / Task Title..."
                       className="flex-1 min-w-0 bg-black/30 border border-white/15 focus:border-white/40 rounded-xl px-3 py-1.5 font-gilroy-bold text-[14px] text-white placeholder:text-white/40 outline-none transition-all"
+                    />
+                  </div>
+
+                  {/* Weekday schedule for the new routine */}
+                  <div className="mt-2 flex items-center gap-2 pl-1 text-white/85">
+                    <i className="ri-calendar-2-line text-[11px] opacity-70"></i>
+                    <WeekdayPicker
+                      value={draftNewTask.days}
+                      onChange={(days) =>
+                        setDraftNewTask((prev) => ({ ...prev, days }))
+                      }
                     />
                   </div>
 

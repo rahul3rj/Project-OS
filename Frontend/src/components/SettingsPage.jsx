@@ -13,7 +13,9 @@ import {
 } from "./iconData.js";
 import { IconDropdownPopover } from "./IconPicker.jsx";
 import { TimeDropdownPopover } from "./TimePicker.jsx";
+import WeekdayPicker from "./WeekdayPicker.jsx";
 import {
+  duplicateRoutine,
   insertGroupByTime,
   moveItem,
   setGroupTimeOrdered,
@@ -1933,13 +1935,24 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
   }, []);
 
   const addGroup = () => {
-    const g = { id: makeId(), title: "New Routine", iconClass: "ri-briefcase-line", time: "9:00 am", streak: 0, subtasks: [] };
+    const g = { id: makeId(), title: "New Routine", iconClass: "ri-briefcase-line", time: "9:00 am", streak: 0, days: [], subtasks: [] };
     animateReorderRef.current = true;
     onTimeBoxingGroupsChange(insertGroupByTime(timeBoxingGroups, g));
     setExpandedGroupId(g.id);
   };
 
   const removeGroup = (id) => onTimeBoxingGroupsChange(timeBoxingGroups.filter((g) => g.id !== id));
+
+  const duplicateGroup = (id) => {
+    const index = timeBoxingGroups.findIndex((g) => g.id === id);
+    if (index === -1) return;
+    const copy = duplicateRoutine(timeBoxingGroups[index], makeId);
+    const next = [...timeBoxingGroups];
+    next.splice(index + 1, 0, copy);
+    animateReorderRef.current = true;
+    onTimeBoxingGroupsChange(next);
+    setExpandedGroupId(copy.id);
+  };
 
   const updateGroup = (id, patch) => {
     // A time edit re-inserts the card at its chronological slot; every other
@@ -2053,7 +2066,7 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
     <CardContainer
       overflowVisible={anyPickerOpen}
       title="Time Boxing Routine Editor"
-      description="Structure your daily routines into scheduled task blocks with subtask checklists. Drag task cards to reorder them manually, or change a start time and the card jumps to its chronological slot."
+      description="Structure your daily routines into scheduled task blocks with subtask checklists. Pick weekdays per routine so weekday and weekend plans can differ — routines only appear on the days you select. Drag task cards to reorder them manually, or change a start time and the card jumps to its chronological slot."
     >
       <div className="flex flex-col gap-4 pt-3 border-t border-white/10">
         <div className="flex flex-col gap-4">
@@ -2162,7 +2175,7 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
                     )}
                   </div>
 
-                  {/* Subtask Toggle & Delete Button */}
+                  {/* Subtask Toggle, Duplicate & Delete Button */}
                   <div className="flex items-center gap-2 shrink-0 ml-auto">
                     <button
                       type="button"
@@ -2174,6 +2187,14 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
                     </button>
                     <button
                       type="button"
+                      onClick={() => duplicateGroup(group.id)}
+                      className="h-10 w-10 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white cursor-pointer transition-all flex items-center justify-center shrink-0 active:scale-95"
+                      title="Duplicate routine (then change its days)"
+                    >
+                      <i className="ri-file-copy-line text-sm" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => removeGroup(group.id)}
                       className="h-10 w-10 rounded-2xl bg-white/5 hover:bg-red-500/20 border border-white/10 text-white/50 hover:text-red-400 cursor-pointer transition-all flex items-center justify-center shrink-0 active:scale-95"
                       title="Remove Group"
@@ -2181,6 +2202,18 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
                       <i className="ri-delete-bin-6-line text-sm" />
                     </button>
                   </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 px-3 pb-3 -mt-1 text-white/80">
+                  <i className="ri-calendar-2-line text-sm text-[color:var(--theme)]" />
+                  <span className="text-[10px] font-gilroy-medium text-white/45">
+                    Repeat on
+                  </span>
+                  <WeekdayPicker
+                    value={group.days}
+                    onChange={(days) => updateGroup(group.id, { days })}
+                    className="ml-auto"
+                  />
                 </div>
 
                 {expandedGroupId === group.id && (
