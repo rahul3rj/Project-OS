@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { recordActivity } from "../utils/activityStore";
 
 const STORAGE = {
@@ -6,6 +6,15 @@ const STORAGE = {
 };
 
 import { storageGet, storageSet } from "../utils/storage.js";
+import {
+  formatDays,
+  getDayKey,
+  isDoneToday,
+  isScheduledOn,
+  stampLegacyDone,
+  toggleDoneToday,
+} from "../utils/weekdays.js";
+import WeekdayPicker from "./WeekdayPicker.jsx";
 
 const makeId = () => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
@@ -28,8 +37,24 @@ const Todo = ({ dragHandleProps }) => {
   const [dragOverId, setDragOverId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
+  const [daysEditorId, setDaysEditorId] = useState(null);
+  const [showAll, setShowAll] = useState(false);
+  const [today, setToday] = useState(() => ({
+    key: getDayKey(),
+    weekday: new Date().getDay(),
+  }));
   const addInputRef = useRef(null);
   const isHydratedRef = React.useRef(false);
+
+  // Keep "today" fresh so weekday filtering and the per-day checkbox reset
+  // roll over at midnight even if the tab stays open.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const next = { key: getDayKey(), weekday: new Date().getDay() };
+      setToday((prev) => (prev.key === next.key ? prev : next));
+    }, 60000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,13 +73,14 @@ const Todo = ({ dragHandleProps }) => {
           }
         }
         if (Array.isArray(parsed)) {
-          setTasks(parsed);
+          setTasks(stampLegacyDone(parsed));
         } else {
           setTasks(DEFAULT_DEMO_TASKS);
         }
       } else {
-        setTasks(DEFAULT_DEMO_TASKS);
-        storageSet(STORAGE.items, DEFAULT_DEMO_TASKS);
+        const initialTasks = stampLegacyDone(DEFAULT_DEMO_TASKS);
+        setTasks(initialTasks);
+        storageSet(STORAGE.items, initialTasks);
       }
       isHydratedRef.current = true;
     })();
@@ -69,6 +95,23 @@ const Todo = ({ dragHandleProps }) => {
     storageSet(STORAGE.items, JSON.stringify(tasks));
   }, [tasks]);
 
+  // Only tasks scheduled for today's weekday are shown, plus the one whose
+  // day picker is open (so it doesn't vanish mid-edit if today gets unticked).
+  const visibleTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          isScheduledOn(task.days, today.weekday) || task.id === daysEditorId,
+      ),
+    [tasks, today.weekday, daysEditorId],
+  );
+  const hiddenCount = tasks.length - visibleTasks.length;
+  const displayedTasks = showAll ? tasks : visibleTasks;
+
+  const setTaskDays = (id, days) => {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, days } : t)));
+  };
+
   const addTask = () => {
     const text = newText.trim();
     if (!text) return;
@@ -77,6 +120,7 @@ const Todo = ({ dragHandleProps }) => {
       id: makeId(),
       text,
       done: false,
+      days: [],
     };
 
     setTasks((prev) => [...prev, task]);
@@ -85,9 +129,9 @@ const Todo = ({ dragHandleProps }) => {
 
   const toggleDone = (id) => {
     const task = tasks.find((t) => t.id === id);
-    if (task && !task.done) recordActivity(1);
+    if (task && !isDoneToday(task, today.key)) recordActivity(1);
     setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
+      prev.map((t) => (t.id === id ? toggleDoneToday(t) : t)),
     );
   };
 
@@ -166,16 +210,36 @@ const Todo = ({ dragHandleProps }) => {
           <i className="ri-draggable text-sm pointer-events-none"></i>
           <span className="pointer-events-none">Notepad</span>
         </div>
+        {(showAll || hiddenCount > 0) && (
+          <button
+            type="button"
+            onClick={() => setShowAll((prev) => !prev)}
+            title={
+              showAll
+                ? "Show only today's tasks"
+                : `Show all tasks (${hiddenCount} not scheduled today)`
+            }
+            className="opacity-0 group-hover/widget:opacity-100 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] text-white/70 hover:text-white bg-white/10 hover:bg-white/20 active:scale-95 transition-all cursor-pointer border border-white/15"
+          >
+            <i
+              className={`text-xs ${
+                showAll ? "ri-eye-off-line" : "ri-eye-line"
+              }`}
+            ></i>
+            <span>{showAll ? "Today" : `${hiddenCount} hidden`}</span>
+          </button>
+        )}
       </div>
 
       {/* Task Items & Inline Add Task Input */}
       <div className="w-full flex-1 min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-1.5 z-10 pr-0.5">
-        {tasks.map((task) => {
+        {displayedTasks.map((task) => {
           const isDragging = draggedId === task.id;
           const isDragOver = dragOverId === task.id;
+          const done = isDoneToday(task, today.key);
           return (
+          <React.Fragment key={task.id}>
           <div
-            key={task.id}
             draggable
             onDragStart={(e) => handleTaskDragStart(e, task.id)}
             onDragOver={(e) => handleTaskDragOver(e, task.id)}
@@ -193,10 +257,10 @@ const Todo = ({ dragHandleProps }) => {
             <button
               type="button"
               onClick={() => toggleDone(task.id)}
-              title={task.done ? "Mark as not done" : "Mark as done"}
+              title={done ? "Mark as not done" : "Mark as done"}
               className="shrink-0 text-white/80 hover:text-white cursor-pointer focus:outline-none"
             >
-              {task.done ? (
+              {done ? (
                 <i className="ri-checkbox-circle-fill text-base text-white/70"></i>
               ) : (
                 <i className="ri-checkbox-blank-circle-line text-base text-white/60 hover:text-white"></i>
@@ -228,12 +292,42 @@ const Todo = ({ dragHandleProps }) => {
                 onClick={() => startEditing(task)}
                 title="Click to edit"
                 className={`flex-1 min-w-0 font-gilroy-medium cursor-text truncate ${
-                  task.done ? "line-through text-white/40" : "text-white/90"
+                  done ? "line-through text-white/40" : "text-white/90"
                 }`}
               >
                 {task.text}
               </span>
             )}
+
+            {/* Scheduled weekdays badge */}
+            {formatDays(task.days) && (
+              <span
+                className="shrink-0 text-[9px] text-white/35"
+                title={`Repeats: ${formatDays(task.days)}`}
+              >
+                {formatDays(task.days)}
+              </span>
+            )}
+
+            {/* Weekday repeat picker toggle */}
+            <button
+              type="button"
+              onClick={() =>
+                setDaysEditorId((prev) => (prev === task.id ? null : task.id))
+              }
+              className={`transition-opacity p-0.5 cursor-pointer shrink-0 hover:text-white/80 ${
+                task.days?.length
+                  ? "opacity-100 text-white/70"
+                  : "opacity-0 group-hover/task:opacity-100 text-white/30"
+              }`}
+              title={
+                task.days?.length
+                  ? `Repeats: ${formatDays(task.days)}`
+                  : "Choose weekdays for this task"
+              }
+            >
+              <i className="ri-calendar-2-line text-xs"></i>
+            </button>
 
             {/* Hover Delete Action */}
             <button
@@ -245,8 +339,25 @@ const Todo = ({ dragHandleProps }) => {
               <i className="ri-close-line text-xs"></i>
             </button>
           </div>
+          {daysEditorId === task.id && (
+            <div className="flex items-center gap-2 pl-8 pr-1 pb-1">
+              <i className="ri-calendar-2-line text-[10px] text-white/40"></i>
+              <WeekdayPicker
+                value={task.days}
+                onChange={(days) => setTaskDays(task.id, days)}
+                className="text-white/85"
+              />
+            </div>
+          )}
+          </React.Fragment>
           );
         })}
+
+        {visibleTasks.length === 0 && !showAll && (
+          <div className="py-1 text-[11px] italic text-white/40">
+            Nothing scheduled for today.
+          </div>
+        )}
 
         {/* Inline Add Task Row (matching mockup screenshot) */}
         <div className={`flex items-center gap-2.5 text-xs sm:text-sm py-0.5 transition-opacity duration-200 ${
