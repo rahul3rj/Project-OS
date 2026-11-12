@@ -1,0 +1,167 @@
+/* The atmospheric themes share accessible dark surfaces and honor each palette. */
+[data-theme="aurora"] {
+  --atmosphere-surface: rgba(7, 19, 30, .94);
+  --atmosphere-border: rgba(105, 210, 232, .40);
+  --atmosphere-radius: 8px;
+  --atmosphere-shadow: 0 12px 30px rgba(0, 0, 0, .55), 0 0 16px rgba(68, 170, 212, .12), inset 0 1px rgba(212, 247, 255, .12);
+}
+
+[data-theme="ember"] {
+  --atmosphere-surface: #1d1d1d;
+  --atmosphere-border: var(--theme-1, #ffe56b);
+  --atmosphere-radius: 0px;
+  --atmosphere-shadow: 5px 5px 0 #000;
+}
+
+[data-theme="botanical"] {
+  --atmosphere-surface: rgba(32, 45, 33, .91);
+  --atmosphere-border: rgba(225, 211, 173, .42);
+  --atmosphere-radius: 16px;
+  --atmosphere-shadow: 0 14px 36px rgba(20, 25, 16, .34), inset 0 0 0 3px rgba(219, 205, 164, .05), inset 0 1px rgba(248, 233, 195, .14);
+}
+
+[data-theme="obsidian"] {
+  --atmosphere-surface: #c0c0c0;
+  --atmosphere-border: #dfdfdf;
+  --atmosphere-radius: 0px;
+  --atmosphere-shadow: inset 1px 1px #fff, inset -1px -1px #404040, 2px 2px 0 rgba(0, 0, 0, .4);
+}
+
+:is([data-theme="aurora"], [data-theme="ember"], [data-theme="botanical"], [data-theme="obsidian"]) .theme-wallpaper {
+  display: block;
+  filter: brightness(.86);
+}
+
+:is([data-theme="aurora"], [data-theme="ember"], [data-theme="botanical"], [data-theme="obsidian"]) :is(.figma-glass-card, .figma-glass-static, .figma-glass-clean, .figma-glass-border-slide, .card-glass-bg) {
+  background: var(--atmosphere-surface) !important;
+  border: 1px solid var(--atmosphere-border) !important;
+  border-radius: var(--atmosphere-radius) !important;
+  box-shadow: var(--atmosphere-shadow) !important;
+  backdrop-filter: blur(18px) saturate(115%);
+  -webkit-backdrop-filter: blur(18px) saturate(115%);
+  color: #fff;
+}
+
+:is([data-theme="aurora"], [data-theme="ember"], [data-theme="botanical"], [data-theme="obsidian"]) :is(.figma-glass-card, .figma-glass-static, .figma-glass-clean, .figma-glass-border-slide, .card-glass-bg)::before {
+  opacity: .12;
+}
+
+[data-theme="aurora"] :is(.figma-glass-card, .card-glass-bg):hover {
+  border-color: color-mix(in srgb, var(--theme-2) 75%, transparent) !important;
+}
+
+/* Retro evokes nighttime city light while keeping the selected font. */
+[data-theme="aurora"] :is(.figma-glass-card, .figma-glass-static, .figma-glass-clean, .figma-glass-border-slide, .card-glass-bg) {
+  backdrop-filter: blur(8px) saturate(110%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(110%) !important;
+}
+
+[data-theme="aurora"] :is(.figma-glass-card, .figma-glass-static, .card-glass-bg)::before {
+  opacity: .16;
+}
+
+[data-theme="aurora"] :is(.grid-widget, .grid-ghost, .timebox-task-card) {
+  border-radius: 8px !important;
+}
+
+[data-theme="ember"] :is(.figma-glass-card, .card-glass-bg):hover {
+  border-color: var(--theme-1, #ffe56b) !important;
+}
+
+/* Brutal keeps text readable on solid panels and uses hard, offset edges. */
+[data-theme="ember"] :is(.figma-glass-card, .figma-glass-static, .figma-glass-clean, .figma-glass-border-slide, .card-glass-bg) {
+  border-width: 2px !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-theme="ember"] :is(.figma-glass-card, .figma-glass-static, .figma-glass-clean, .figma-glass-border-slide, .card-glass-bg)::before {
+  display: none !important;
+}
+
+[data-theme="ember"] :is(.grid-widget, .grid-ghost, .timebox-task-card) {
+  border-radius: 0 !important;
+}
+
+[data-theme="botanical"] :is(.figma-glass-card, .card-glass-bg):hover {
+  border-color: color-mix(in srgb, var(--theme-1) 50%, transparent) !important;
+}
+
+/* An aged, painted finish without changing the dashboard's layout or controls. */
+[data-theme="botanical"] :is(.figma-glass-card, .figma-glass-static, .figma-glass-clean, .figma-glass-border-slide, .card-glass-bg) {
+  backdrop-filter: blur(6px) sepia(18%) !important;
+  -webkit-backdrop-filter: blur(6px) sepia(18%) !important;
+}
+
+[data-theme="botanical"] :is(.figma-glass-card, .figma-glass-static, .card-glass-bg)::before {
+  opacity: .19;
+}
+
+[data-theme="botanical"] :is(.grid-widget, .figma-glass-static, .figma-glass-border-slide, .card-glass-bg) {
+  border-radius: 10px !important;
+}
+
+[data-theme="obsidian"] :is(.figma-glass-card, .card-glass-bg):hover {
+  border-color: #fff #404040 #404040 #fff !important;
+}
+
+/* Classic Windows panels: raised gray chrome and navy title bars. */
+[data-theme="obsidian"] :is(.figma-glass-card, .figma-glass-static, .figma-glass-clean, .figma-glass-border-slide, .card-glass-bg) {
+  --theme-text: #171717;
+  color: #171717 !important;
+  background: #c0c0c0 !important;
+  border: 2px solid !important;
+  border-color: #fff #404040 #404040 #fff !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-theme="obsidian"] .grid-widget > .figma-glass-static {
+  background: linear-gradient(to bottom, #08186c 0 34px, #c0c0c0 34px 100%) !important;
+}
+
+[data-theme="obsidian"] .grid-widget > .figma-glass-static > div:first-of-type {
+  --theme-text: #fff;
+  color: #fff;
+}
+
+/* Dark controls and previews retain light text against their dark backgrounds. */
+[data-theme="obsidian"] :is([class*="bg-black/"]:not(.figma-glass-static):not(.card-glass-bg):not(.figma-glass-card):not(.figma-glass-clean):not(.figma-glass-border-slide), button[style*="--theme-4"], .figma-glass-static [role="tooltip"]) {
+  --theme-text: #fff;
+}
+
+[data-theme="obsidian"] .timebox-task-card {
+  --theme-text: #171717;
+  background: #e0e0e0 !important;
+  color: #171717 !important;
+  border-radius: 0 !important;
+}
+
+[data-theme="obsidian"] .grid-widget .font-heathergreen {
+  background-image: linear-gradient(#0b1b68, #354982) !important;
+}
+
+[data-theme="obsidian"] .card-glass-bg :is(input:not([type="range"]):not([type="color"]), textarea, select) {
+  --theme-text: #171717;
+  color: #171717 !important;
+  background-color: #fff !important;
+  border: 2px inset #aaa !important;
+  border-radius: 0 !important;
+}
+
+[data-theme="obsidian"] .card-glass-bg :is(input, textarea)::placeholder {
+  color: #666 !important;
+}
+
+[data-theme="obsidian"] :is(.figma-glass-card, .figma-glass-static, .figma-glass-clean, .figma-glass-border-slide, .card-glass-bg)::before {
+  display: none !important;
+}
+
+[data-theme="obsidian"] .grid-widget {
+  border-radius: 0 !important;
+}
+
+[data-theme="obsidian"] .xp-start-button {
+  background: #c0c0c0 !important;
+  border-radius: 0 !important;
+}

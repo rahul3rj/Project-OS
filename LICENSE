@@ -1,4 +1,77 @@
-﻿MIT License
+Project OS Personal Use License
+
+Copyright (c) 2025-2026 Rahul Jha and other contributors.
+
+Starting with Project OS v2.1.0, this license applies to Project OS releases
+and their newly added material only to the extent that the relevant copyright
+holders have the right to make them available under these terms.
+
+1. PERMITTED USE
+
+You may download, install, and run Project OS for personal, educational,
+research, or other non-commercial purposes. You may make copies reasonably
+necessary to install, run, or privately back up the software for those purposes.
+
+2. RESTRICTIONS
+
+Except where applicable law permits or a rights holder grants prior written
+permission, you may not redistribute, publish, sublicense, sell, or make
+available to others the software or any modified version, in whole or in part,
+except for the contribution activity described in section 3.
+You may not present Project OS or a modified version as your own product,
+rebrand it, or use it in a commercial product or service without prior written
+permission from the applicable rights holders. Private modifications and copies
+remain subject to applicable law and any rights granted by other licenses.
+
+3. CONTRIBUTIONS
+
+Contributions are welcome. For the purpose of proposing a contribution to the
+official Project OS repository, you may fork it on GitHub, clone it, make
+changes, and publish those changes in your GitHub fork to submit a pull request.
+This permission does not authorize distributing Project OS or a modified version
+as a separate product or service.
+
+Contributors retain rights in their contributions unless they separately agree
+otherwise. Submission alone does not transfer ownership or grant Rahul Jha
+commercial or relicensing rights beyond those otherwise applicable. The
+maintainer may request a separate agreement before accepting a contribution.
+
+4. COMMERCIAL USE AND OTHER PERMISSIONS
+
+Commercial use, including a paid service or use as part of a for-profit
+organization's operations, requires separate permission from the applicable
+rights holders. Rahul Jha (@rahul3rj) retains the right to distribute and commercially use
+his own contributions; use of other material remains subject to the rights and
+licenses applicable to it. For permission inquiries, contact
+https://github.com/rahul3rj.
+
+5. PRIOR RELEASES AND THIRD-PARTY MATERIAL
+
+Project OS releases before v2.1.0 were made available under the MIT License.
+Material from those releases may also be present in v2.1.0 and later releases;
+the new terms do not revoke MIT rights already granted for that material or
+rights granted under any other applicable license. The original MIT notice is
+reproduced below for the material to which it applies. Third-party software,
+assets, and contributions may have their own copyright holders and license
+terms; their applicable notices and licenses remain in effect. These terms do
+not limit rights that cannot be restricted by applicable law, or rights granted
+under GitHub's terms for viewing and forking public repositories.
+
+6. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Original MIT notice (for material previously released under these terms)
+
+MIT License
 
 Copyright (c) 2025 Rahul Jha
 

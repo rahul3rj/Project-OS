@@ -5,6 +5,15 @@ Every bug report, feature idea, and line of code makes Project OS better for eve
 
 This document explains how to get involved — please read it before submitting issues or pull requests.
 
+Bug reports, feature suggestions, and pull requests are welcome. You may fork,
+clone, and modify the repository to propose changes to Project OS. Contributors
+retain rights in their work; a submission does not transfer ownership or grant
+commercial or relicensing rights beyond those otherwise applicable. The
+maintainer may request a separate agreement before accepting a contribution.
+Starting with v2.1.0, the [Project OS Personal Use License](./LICENSE) applies
+to material covered by it; earlier MIT-licensed releases and material, third-party
+rights, and rights under GitHub's terms continue to apply where applicable.
+
 ---
 
 ## Table of Contents

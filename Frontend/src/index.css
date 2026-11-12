@@ -6,6 +6,7 @@
 @import "./themes/manga.css";
 @import "./themes/cyberpunk.css";
 @import "./themes/pixel.css";
+@import "./themes/atmospheres.css";
 @import "tailwindcss";
 
 @font-face {
@@ -14,6 +15,49 @@
   font-weight: normal;
   font-style: normal;
   font-display: swap;
+}
+
+/* Cycle selectors: keep the menu frame still while only the options scroll. */
+.cycle-select-trigger {
+  background: color-mix(in srgb, var(--theme-4, #0F172A) 80%, transparent);
+  color: var(--theme-text, #fff);
+  border-color: color-mix(in srgb, var(--theme-1, #CBD5E1) 30%, transparent);
+}
+.cycle-select-menu {
+  padding: 4px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--theme-1, #CBD5E1) 35%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--theme-4, #0F172A) 94%, #000);
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .3);
+}
+.cycle-select-menu .cycle-select-option {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 10px; border: 0; border-radius: 6px; background: transparent;
+  color: inherit; font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+  box-shadow: none;
+}
+.cycle-select-menu .cycle-select-option:hover,
+.cycle-select-menu .cycle-select-option[data-active="true"] {
+  background: color-mix(in srgb, var(--theme-1, #CBD5E1) 12%, transparent);
+}
+[data-theme="cyberpunk"] .cycle-select-menu,
+[data-theme="pixel"] .cycle-select-menu {
+  color: color-mix(in srgb, var(--theme-1, #CBD5E1) 85%, white);
+  border-radius: 2px;
+}
+[data-theme="manga"] .cycle-select-menu,
+[data-theme="obsidian"] .cycle-select-menu {
+  background: #eee; color: #171717; border-color: #333;
+}
+[data-theme="manga"] .cycle-select-menu .cycle-select-option:hover {
+  transform: none !important;
+}
+[data-theme="cyberpunk"] .card-glass-bg .cycle-select-trigger,
+[data-theme="pixel"] .card-glass-bg .cycle-select-trigger {
+  background: color-mix(in srgb, var(--theme-4, #0F172A) 85%, #000) !important;
+  box-shadow: none !important;
 }
 
 @font-face {
@@ -73,6 +117,12 @@
   body {
     font-size: 1rem;
     font-synthesis: none;
+  }
+
+  img {
+    -webkit-user-drag: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   input,

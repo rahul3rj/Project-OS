@@ -1,29 +1,30 @@
 {
   "manifest_version": 3,
   "name": "Project OS",
-  "version": "1.0.0",
+  "version": "2.5.0",
+  "minimum_chrome_version": "121",
   "description": "Futuristic all-in-one customizable new tab workspace and productivity operating system.",
   "browser_specific_settings": {
     "gecko": {
       "id": "project-os-workspace@antigravity",
-      "strict_min_version": "115.0"
+      "strict_min_version": "121.0"
     }
   },
   "permissions": [
+    "identity",
     "storage",
-    "unlimitedStorage",
-    "declarativeNetRequest"
+    "unlimitedStorage"
   ],
   "host_permissions": [
-    "https://*.youtube.com/*",
-    "https://*.youtube-nocookie.com/*",
-    "https://*.googlevideo.com/*",
-    "https://noembed.com/*",
-    "https://music.youtube.com/*",
+    "https://*.supabase.co/*",
     "https://api.open-meteo.com/*",
     "https://api.github.com/*",
     "https://github.com/*",
     "https://github-contributions-api.jogruber.de/*",
+    "https://codeforces.com/*",
+    "https://leetcode.com/*",
+    "https://fonts.googleapis.com/*",
+    "https://fonts.gstatic.com/*",
     "https://*.spotify.com/*",
     "https://streams.ilovemusic.de/*",
     "https://*.zeno.fm/*",
@@ -31,24 +32,43 @@
     "https://streams.fluxfm.de/*",
     "https://*.pinimg.com/*"
   ],
-  "declarative_net_request": {
-    "rule_resources": [
-      {
-        "id": "ruleset_1",
-        "enabled": true,
-        "path": "rules.json"
-      }
-    ]
+  "background": {
+    "service_worker": "analytics-worker.js",
+    "scripts": ["analytics-worker.js"]
   },
   "chrome_url_overrides": {
     "newtab": "index.html"
   },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dynamic-island.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "sleepy.gif",
+        "neutral.gif",
+        "surprised.gif",
+        "Manrope.woff2",
+        "JetBrainsMono.ttf",
+        "Heathergreen.otf",
+        "Gilroy-Medium.ttf",
+        "Gilroy-Bold.ttf",
+        "remixicon.woff2"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "icons": {
     "16": "logo.png",
     "48": "logo.png",
     "128": "logo.png"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; base-uri 'self'; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net data:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://noembed.com https://www.youtube.com https://music.youtube.com https://api.open-meteo.com https://api.github.com https://github.com https://github-contributions-api.jogruber.de https://open.spotify.com https://*.spotify.com https://streams.ilovemusic.de https://*.zeno.fm https://*.laut.fm https://streams.fluxfm.de; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://music.youtube.com https://open.spotify.com; media-src 'self' data: blob: https:;"
+    "extension_pages": "script-src 'self'; object-src 'self'; base-uri 'self'; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net data:; connect-src 'self' https://*.supabase.co https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net https://api.open-meteo.com https://api.github.com https://github.com https://github-contributions-api.jogruber.de https://codeforces.com https://leetcode.com https://open.spotify.com https://*.spotify.com https://streams.ilovemusic.de https://*.zeno.fm https://*.laut.fm https://streams.fluxfm.de; frame-src 'self' https://open.spotify.com; media-src 'self' data: blob: https:;"
   }
 }

@@ -269,17 +269,27 @@
     inset 0 0 20px rgba(0,0,0,0.7) !important;
 }
 
-[data-theme="cyberpunk"] .card-glass-bg button {
+[data-theme="cyberpunk"] .card-glass-bg button,
+[data-theme="cyberpunk"] .settings-cloud-sync button,
+[data-theme="cyberpunk"] .settings-choice {
   background: color-mix(in srgb, var(--theme-1, #FF0055) 18%, rgba(0,0,0,0.6)) !important;
   border: 1px solid color-mix(in srgb, var(--theme-1, #FF0055) 40%, transparent) !important;
   color: color-mix(in srgb, var(--theme-1, #FF0055) 85%, #ffffff) !important;
   box-shadow: 0 0 8px color-mix(in srgb, var(--theme-1, #FF0055) 10%, transparent) !important;
 }
 
-[data-theme="cyberpunk"] .card-glass-bg button:hover {
+[data-theme="cyberpunk"] .card-glass-bg button:hover,
+[data-theme="cyberpunk"] .settings-cloud-sync button:hover,
+[data-theme="cyberpunk"] .settings-choice:hover {
   background: color-mix(in srgb, var(--theme-1, #FF0055) 35%, rgba(0,0,0,0.7)) !important;
   border-color: color-mix(in srgb, var(--theme-1, #FF0055) 80%, transparent) !important;
   box-shadow: 0 0 14px color-mix(in srgb, var(--theme-1, #FF0055) 30%, transparent) !important;
+}
+
+[data-theme="cyberpunk"] .settings-choice[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--theme-1, #FF0055) 35%, rgba(0,0,0,0.7)) !important;
+  border-color: color-mix(in srgb, var(--theme-1, #FF0055) 85%, transparent) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--theme-1, #FF0055) 25%, transparent) !important;
 }
 
 [data-theme="cyberpunk"] .card-glass-bg input {

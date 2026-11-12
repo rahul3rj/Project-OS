@@ -156,6 +156,8 @@
 
 [data-theme="pixel"] .figma-glass-card button:not(.font-heathergreen):not(.timebox-subtask-check),
 [data-theme="pixel"] .card-glass-bg button:not(.font-heathergreen):not(.timebox-subtask-check),
+[data-theme="pixel"] .settings-cloud-sync button,
+[data-theme="pixel"] .settings-choice,
 [data-theme="pixel"] .grid-widget button:not(.font-heathergreen):not(.timebox-subtask-check) {
   background: color-mix(in srgb, var(--theme-1, #00FF66) 10%, rgba(0,0,0,0.75)) !important;
   border: 1px solid color-mix(in srgb, var(--theme-1, #00FF66) 50%, transparent) !important;
@@ -167,7 +169,16 @@
 
 [data-theme="pixel"] .figma-glass-card button:not(.font-heathergreen):hover,
 [data-theme="pixel"] .card-glass-bg button:not(.font-heathergreen):hover,
+[data-theme="pixel"] .settings-cloud-sync button:hover,
+[data-theme="pixel"] .settings-choice:hover,
 [data-theme="pixel"] .grid-widget button:not(.font-heathergreen):hover {
+  background: color-mix(in srgb, var(--theme-1, #00FF66) 28%, rgba(0,0,0,0.85)) !important;
+  border-color: color-mix(in srgb, var(--theme-1, #00FF66) 90%, transparent) !important;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--theme-1, #00FF66) 30%, transparent) !important;
+}
+
+[data-theme="pixel"] .settings-choice[aria-pressed="true"],
+[data-theme="pixel"] .card-glass-bg button.settings-choice[aria-pressed="true"] {
   background: color-mix(in srgb, var(--theme-1, #00FF66) 28%, rgba(0,0,0,0.85)) !important;
   border-color: color-mix(in srgb, var(--theme-1, #00FF66) 90%, transparent) !important;
   box-shadow: 0 0 14px color-mix(in srgb, var(--theme-1, #00FF66) 30%, transparent) !important;

@@ -1,11 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { DEFAULT_LOFI_STATIONS, DEFAULT_SONG_CUSTOM_VIDEO } from "../App";
 import { UI_THEMES } from "../themes/index.js";
 import {
   exportAllStorageData,
   importAllStorageData,
   clearAllStorageData,
+  storageGet,
+  storageSet,
+  subscribeStorageKey,
 } from "../utils/storage.js";
+import { DEFAULT_FOCUS_CYCLE, FOCUS_CYCLE_EVENT, FOCUS_CYCLE_KEY, normalizeFocusCycle } from "../utils/focusCycle.js";
 import {
   fitPopoverInContainer,
   ICON_CATEGORIES,
@@ -13,6 +18,8 @@ import {
 } from "./iconData.js";
 import { IconDropdownPopover } from "./IconPicker.jsx";
 import { TimeDropdownPopover } from "./TimePicker.jsx";
+import { CUSTOM_ROUTINE } from "../utils/timeboxing.js";
+import CloudSync from "./CloudSync.jsx";
 
 /* ─── Ringtone helpers ─── */
 const playBeep = () => {
@@ -63,8 +70,6 @@ const THEME_PRESETS = [
   { id: "dark", colors: ["#9CA3AF", "#4B5563", "#1F2937", "#111827"] },
 ];
 
-
-
 const MAX_SHORTCUTS = 7;
 
 const WATER_GOALS = [
@@ -74,16 +79,13 @@ const WATER_GOALS = [
   { label: "6.0 L", value: 6000 },
 ];
 
-
 const NAV_TABS = [
-  { id: "appearance", label: "Appearance & Theme", icon: "ri-palette-line" },
-  { id: "focus", label: "Focus & Reminders", icon: "ri-timer-line" },
-  { id: "songPlayer", label: "Song Player Settings", icon: "ri-music-2-line" },
-  { id: "taskbar", label: "Taskbar Shortcuts", icon: "ri-external-link-line" },
-  { id: "tabs", label: "Important Tabs", icon: "ri-bookmark-3-line" },
+  { id: "appearance", label: "Appearance", icon: "ri-palette-line", sections: [{ id: "wallpaper", label: "Wallpaper & colors" }, { id: "theme", label: "Theme" }, { id: "typography", label: "Typography" }] },
+  { id: "dashboard", label: "Dashboard", icon: "ri-layout-grid-line", sections: [{ id: "widgets", label: "Widgets" }, { id: "activity", label: "Activity" }, { id: "focus", label: "Timer & water" }, { id: "songPlayer", label: "Music" }, { id: "stations", label: "Stations" }] },
   { id: "timebox", label: "Time Boxing", icon: "ri-time-line" },
-  { id: "widgets", label: "Widget Visibility", icon: "ri-layout-grid-line" },
-  { id: "backup", label: "Export & Restore Data", icon: "ri-save-3-line" },
+  { id: "shortcuts", label: "Shortcuts", icon: "ri-external-link-line", sections: [{ id: "taskbar", label: "Quick links" }, { id: "tabs", label: "Tab groups" }] },
+  { id: "island", label: "Dynamic Island", icon: "ri-layout-top-2-line" },
+  { id: "backup", label: "Backup & reset", icon: "ri-save-3-line" },
 ];
 
 const makeId = () => {
@@ -99,7 +101,9 @@ const Toggle = ({ checked, onChange }) => (
     type="button"
     onClick={() => onChange(!checked)}
     className={`relative h-6 w-11 rounded-full transition-all duration-300 flex items-center px-0.5 shrink-0 cursor-pointer border border-white/15 ${
-      checked ? "bg-[color:var(--theme)] shadow-md" : "bg-black/50 border-white/10"
+      checked
+        ? "bg-[color:var(--theme)] shadow-md"
+        : "bg-black/50 border-white/10"
     }`}
     aria-pressed={checked}
   >
@@ -111,7 +115,13 @@ const Toggle = ({ checked, onChange }) => (
   </button>
 );
 
-const InputField = ({ value, onChange, placeholder, className = "", type = "text" }) => (
+const InputField = ({
+  value,
+  onChange,
+  placeholder,
+  className = "",
+  type = "text",
+}) => (
   <input
     type={type}
     value={value}
@@ -135,15 +145,25 @@ const Pill = ({ active, onClick, children }) => (
   </button>
 );
 
-const CardContainer = ({ title, description, children, action, overflowVisible = false }) => (
+const CardContainer = ({
+  title,
+  description,
+  children,
+  action,
+  overflowVisible = false,
+}) => (
   <div
-    className="card-glass-bg bg-black/30 border border-white/10 rounded-[24px] p-6 flex flex-col gap-5 relative text-white font-gilroy-medium shadow-xl backdrop-blur-sm"
+    className="card-glass-bg bg-black/30 border border-white/10 rounded-[24px] p-4 sm:p-5 flex flex-col gap-4 relative text-white font-gilroy-medium shadow-xl backdrop-blur-sm"
     style={overflowVisible ? { overflow: "visible" } : undefined}
   >
     <div className="flex items-start justify-between gap-4 z-10 relative">
       <div>
         <h3 className="text-white text-base font-gilroy-bold">{title}</h3>
-        {description && <p className="text-white/50 text-xs mt-1 font-gilroy-medium">{description}</p>}
+        {description && (
+          <p className="text-white/50 text-xs mt-1 font-gilroy-medium">
+            {description}
+          </p>
+        )}
       </div>
       {action}
     </div>
@@ -169,10 +189,19 @@ const RingtoneRow = ({ label, value, onChange }) => {
     <div className="flex items-center justify-between gap-3 py-1.5">
       <span className="text-white/80 text-xs font-gilroy-medium">{label}</span>
       <div className="flex items-center gap-2">
-        <Pill active={!value || value === "beep"} onClick={() => onChange("beep")}>
+        <Pill
+          active={!value || value === "beep"}
+          onClick={() => onChange("beep")}
+        >
           Default Beep
         </Pill>
-        <input ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={handleFile} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="audio/*"
+          className="hidden"
+          onChange={handleFile}
+        />
         <Pill active={hasCustom} onClick={() => fileRef.current?.click()}>
           {hasCustom ? "Custom Tone ✓" : "Upload Tone"}
         </Pill>
@@ -196,7 +225,8 @@ const IconPickerModal = ({ current, onSelect, onClose }) => {
 
   const filteredItems = useMemo(() => {
     return ICON_GRID_ITEMS.filter((item) => {
-      const matchesCategory = activeCategory === "all" || item.category === activeCategory;
+      const matchesCategory =
+        activeCategory === "all" || item.category === activeCategory;
       const q = search.toLowerCase().trim();
       const matchesSearch =
         !q ||
@@ -312,25 +342,65 @@ const FONT_CATEGORIES = ["All", "Sans", "Mono", "Serif", "Display", "Retro"];
 const GOOGLE_FONTS_PRESETS = [
   { name: "Gilroy", desc: "Default clean geometric sans-serif", cat: "Sans" },
   { name: "Inter", desc: "Modern, ultra-legible screen font", cat: "Sans" },
-  { name: "Poppins", desc: "Geometric sans-serif with friendly curves", cat: "Sans" },
-  { name: "Roboto", desc: "Classic mechanical & friendly sans-serif", cat: "Sans" },
-  { name: "Outfit", desc: "Sleek contemporary display & body font", cat: "Sans" },
-  { name: "Plus Jakarta Sans", desc: "Modern tech brand typography", cat: "Sans" },
-  { name: "Space Grotesk", desc: "Quirky tech & sci-fi sans-serif", cat: "Mono" },
+  {
+    name: "Poppins",
+    desc: "Geometric sans-serif with friendly curves",
+    cat: "Sans",
+  },
+  {
+    name: "Roboto",
+    desc: "Classic mechanical & friendly sans-serif",
+    cat: "Sans",
+  },
+  {
+    name: "Outfit",
+    desc: "Sleek contemporary display & body font",
+    cat: "Sans",
+  },
+  {
+    name: "Plus Jakarta Sans",
+    desc: "Modern tech brand typography",
+    cat: "Sans",
+  },
+  {
+    name: "Space Grotesk",
+    desc: "Quirky tech & sci-fi sans-serif",
+    cat: "Mono",
+  },
   { name: "Lexend", desc: "Designed to improve reading speed", cat: "Sans" },
   { name: "Montserrat", desc: "Urban signage inspired geometry", cat: "Sans" },
   { name: "Lato", desc: "Warm & serious sans-serif", cat: "Sans" },
   { name: "Open Sans", desc: "Neutral & friendly universal font", cat: "Sans" },
   { name: "Raleway", desc: "Elegant thin-weight heading font", cat: "Sans" },
-  { name: "Playfair Display", desc: "High-contrast editorial serif", cat: "Serif" },
-  { name: "Fira Code", desc: "Monospace font with programming ligatures", cat: "Mono" },
+  {
+    name: "Playfair Display",
+    desc: "High-contrast editorial serif",
+    cat: "Serif",
+  },
+  {
+    name: "Fira Code",
+    desc: "Monospace font with programming ligatures",
+    cat: "Mono",
+  },
   { name: "Orbitron", desc: "Futuristic sci-fi display font", cat: "Display" },
-  { name: "Rajdhani", desc: "Modular, condensed military font", cat: "Display" },
-  { name: "Share Tech Mono", desc: "Terminal & hacker monospace font", cat: "Mono" },
+  {
+    name: "Rajdhani",
+    desc: "Modular, condensed military font",
+    cat: "Display",
+  },
+  {
+    name: "Share Tech Mono",
+    desc: "Terminal & hacker monospace font",
+    cat: "Mono",
+  },
   { name: "Bangers", desc: "Comic book bold headline font", cat: "Retro" },
   { name: "Press Start 2P", desc: "8-bit arcade retro font", cat: "Retro" },
   { name: "Cinzel", desc: "Classical Roman proportions", cat: "Serif" },
-  { name: "Permanent Marker", desc: "Bold marker pen handwriting", cat: "Retro" },
+  {
+    name: "Permanent Marker",
+    desc: "Bold marker pen handwriting",
+    cat: "Retro",
+  },
   { name: "Syne", desc: "Artistic & unique display font", cat: "Display" },
   { name: "Oswald", desc: "Re-drawn classic Gothic font", cat: "Display" },
   { name: "Nunito", desc: "Rounded well-balanced sans-serif", cat: "Sans" },
@@ -340,6 +410,7 @@ const GOOGLE_FONTS_PRESETS = [
 
 /* ─── TAB 1: Appearance ─── */
 const AppearanceTab = ({
+  section = "wallpaper",
   wallpaper,
   onWallpaperPick,
   onWallpaperReset,
@@ -372,14 +443,18 @@ const AppearanceTab = ({
     if (!query) return list;
 
     return list.filter(
-      (f) => f.name.toLowerCase().includes(query) || f.desc.toLowerCase().includes(query)
+      (f) =>
+        f.name.toLowerCase().includes(query) ||
+        f.desc.toLowerCase().includes(query),
     );
   }, [fontSearch, fontCategory]);
 
   const showCustomAdd = useMemo(() => {
     const query = fontSearch.trim();
     if (!query) return false;
-    return !GOOGLE_FONTS_PRESETS.some((f) => f.name.toLowerCase() === query.toLowerCase());
+    return !GOOGLE_FONTS_PRESETS.some(
+      (f) => f.name.toLowerCase() === query.toLowerCase(),
+    );
   }, [fontSearch]);
 
   const processDroppedUrl = async (rawUrl) => {
@@ -389,11 +464,19 @@ const AppearanceTab = ({
 
     try {
       if (cleanUrl.startsWith("data:video/")) {
-        onWallpaperPick({ type: "video", dataUrl: cleanUrl, name: "Dropped Video" });
+        onWallpaperPick({
+          type: "video",
+          dataUrl: cleanUrl,
+          name: "Dropped Video",
+        });
         return;
       }
       if (cleanUrl.startsWith("data:image/")) {
-        onWallpaperPick({ type: "image", dataUrl: cleanUrl, name: "Dropped Image" });
+        onWallpaperPick({
+          type: "image",
+          dataUrl: cleanUrl,
+          name: "Dropped Image",
+        });
         return;
       }
 
@@ -404,11 +487,13 @@ const AppearanceTab = ({
         if (blob && blob.size <= 20 * 1024 * 1024) {
           const reader = new FileReader();
           reader.onload = () => {
-            const isVideo = blob.type.startsWith("video/") || Boolean(cleanUrl.match(/\.(mp4|webm|ogg)(\?.*)?$/i));
+            const isVideo =
+              blob.type.startsWith("video/") ||
+              Boolean(cleanUrl.match(/\.(mp4|webm|ogg)(\?.*)?$/i));
             onWallpaperPick({
               type: isVideo ? "video" : "image",
               dataUrl: String(reader.result),
-              name: "Dropped Media"
+              name: "Dropped Media",
             });
           };
           reader.readAsDataURL(blob);
@@ -422,7 +507,7 @@ const AppearanceTab = ({
       onWallpaperPick({
         type: isVideo ? "video" : "image",
         dataUrl: cleanUrl,
-        name: "Online Image"
+        name: "Online Image",
       });
     } finally {
       setIsProcessing(false);
@@ -503,9 +588,10 @@ const AppearanceTab = ({
   return (
     <div className="flex flex-col gap-6">
       {/* Wallpaper */}
+      {section === "wallpaper" && (
       <CardContainer
-        title="Custom Wallpaper"
-        description="Drag & drop any image/video file or image link directly onto the box below, or click to upload."
+        title="Wallpaper"
+        description="Upload or drop an image or video, or use a link."
         action={
           <div className="flex items-center gap-2">
             <input
@@ -550,20 +636,23 @@ const AppearanceTab = ({
           >
             {wallpaper?.dataUrl ? (
               wallpaper.type === "video" ? (
-                <video src={wallpaper.dataUrl} className="w-full h-full object-cover pointer-events-none" muted autoPlay loop />
+                <video
+                  src={wallpaper.dataUrl}
+                  className="w-full h-full object-cover pointer-events-none"
+                  muted
+                  autoPlay
+                  loop
+                />
               ) : (
-                <img src={wallpaper.dataUrl} alt="" className="w-full h-full object-cover pointer-events-none" />
+                <img
+                  src={wallpaper.dataUrl}
+                  alt=""
+                  className="w-full h-full object-cover pointer-events-none"
+                />
               )
             ) : (
               <img
-                src={
-                  {
-                    manga: "/manga-wallpaper.jpg",
-                    cyberpunk: "/cyberpunk-wallpaper.png",
-                    pixel: "/cli-wallpaper.jpg",
-                    default: "/default-wallpaper.jpg",
-                  }[uiTheme] || "/default-wallpaper.jpg"
-                }
+                src={UI_THEMES.find((theme) => theme.id === uiTheme)?.image || "/default-wallpaper.jpg"}
                 alt=""
                 className="w-full h-full object-cover object-top pointer-events-none"
               />
@@ -572,15 +661,21 @@ const AppearanceTab = ({
             {/* Hover overlay hint */}
             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-1.5 text-white z-10 backdrop-blur-[2px] pointer-events-none">
               <i className="ri-drag-drop-line text-3xl" />
-              <p className="text-xs font-gilroy-bold">Drag & Drop Image or Link Here</p>
-              <span className="text-[10px] text-white/70 font-gilroy-medium">or click to browse files</span>
+              <p className="text-xs font-gilroy-bold">
+                Drag & Drop Image or Link Here
+              </p>
+              <span className="text-[10px] text-white/70 font-gilroy-medium">
+                or click to browse files
+              </span>
             </div>
 
             {/* Drag active overlay */}
             {isDraggingOver && (
               <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-30 flex flex-col items-center justify-center gap-2 text-white animate-fade-in pointer-events-none">
                 <i className="ri-upload-cloud-2-line text-4xl text-[color:var(--theme)] animate-bounce" />
-                <p className="text-sm font-gilroy-bold">Drop Image or Link to Set Wallpaper</p>
+                <p className="text-sm font-gilroy-bold">
+                  Drop Image or Link to Set Wallpaper
+                </p>
               </div>
             )}
 
@@ -588,19 +683,25 @@ const AppearanceTab = ({
             {isProcessing && (
               <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-30 flex flex-col items-center justify-center gap-2 text-white pointer-events-none">
                 <i className="ri-loader-4-line text-3xl animate-spin text-[color:var(--theme)]" />
-                <p className="text-xs font-gilroy-medium">Processing Image...</p>
+                <p className="text-xs font-gilroy-medium">
+                  Processing Image...
+                </p>
               </div>
             )}
 
             {/* Label badge */}
             <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/20 text-xs text-white font-gilroy-medium shadow-md z-20 pointer-events-none">
-              {wallpaper ? wallpaper.name || "Custom Wallpaper" : "Default Wallpaper"}
+              {wallpaper
+                ? wallpaper.name || "Custom Wallpaper"
+                : "Default Wallpaper"}
             </div>
           </div>
 
           {/* Quick Paste Image Link Field */}
           <div className="flex items-center gap-2 pt-2 border-t border-white/10">
-            <span className="text-white/70 text-xs font-gilroy-medium shrink-0">Image Link</span>
+            <span className="text-white/70 text-xs font-gilroy-medium shrink-0">
+              Image Link
+            </span>
             <InputField
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
@@ -623,11 +724,12 @@ const AppearanceTab = ({
           </div>
         </div>
       </CardContainer>
+      )}
 
       {/* Theme Sector — UI Style Themes rendered in rich visual cards */}
+      {section === "theme" && <>
       <CardContainer
-        title="Theme Sector"
-        description="Select a complete UI theme style. Changes backgrounds, glass cards, panels & fonts across your dashboard."
+        title="Theme"
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {UI_THEMES.map((t) => {
@@ -649,9 +751,9 @@ const AppearanceTab = ({
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-                  
+
                   {/* Corner Beta Overlay Badge */}
-                  {(t.id === "manga" || t.beta) && (
+                  {t.beta && (
                     <span className="absolute top-2.5 right-2.5 z-20 px-2 py-0.5 rounded-md bg-amber-400 text-black text-[10px] font-gilroy-bold uppercase tracking-wider border border-yellow-200/50 shadow-md backdrop-blur-sm flex items-center gap-1 select-none">
                       <i className="ri-flask-line text-[11px]" /> Beta
                     </span>
@@ -679,7 +781,9 @@ const AppearanceTab = ({
 
                 <div className="p-3.5 flex flex-col gap-1">
                   <div className="flex items-center gap-2">
-                    <i className={`${t.icon} text-sm text-[color:var(--theme)]`} />
+                    <i
+                      className={`${t.icon} text-sm text-[color:var(--theme)]`}
+                    />
                     <h4 className="text-white text-xs font-gilroy-bold group-hover:text-[color:var(--theme)] transition-colors">
                       {t.name}
                     </h4>
@@ -693,15 +797,19 @@ const AppearanceTab = ({
           })}
         </div>
       </CardContainer>
+      </>}
 
       {/* Theme Color */}
+      {section === "wallpaper" && <>
       <CardContainer
-        title="Theme Accent Palette"
-        description="Select a signature 4-color gradient palette (light to dark) or customize all 4 shades."
+        title="Colors"
+        description="Choose a palette or customize its four shades."
       >
         <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
           {THEME_PRESETS.map((p) => {
-            const isSelected = activeColors.every((c, i) => c.toLowerCase() === p.colors[i].toLowerCase());
+            const isSelected = activeColors.every(
+              (c, i) => c.toLowerCase() === p.colors[i].toLowerCase(),
+            );
             return (
               <button
                 key={p.id}
@@ -715,7 +823,11 @@ const AppearanceTab = ({
               >
                 <div className="w-full h-full rounded-xl overflow-hidden flex">
                   {p.colors.map((colorHex, idx) => (
-                    <div key={idx} className="flex-1 h-full" style={{ backgroundColor: colorHex }} />
+                    <div
+                      key={idx}
+                      className="flex-1 h-full"
+                      style={{ backgroundColor: colorHex }}
+                    />
                   ))}
                 </div>
               </button>
@@ -725,8 +837,12 @@ const AppearanceTab = ({
 
         <div className="flex flex-col gap-3 pt-3 border-t border-white/10 mt-2">
           <div className="flex items-center justify-between">
-            <span className="text-white/80 text-xs font-gilroy-medium">Custom 4-Color Selection</span>
-            <span className="text-white/40 text-[11px] font-gilroy-medium">Light → Dark</span>
+            <span className="text-white/80 text-xs font-gilroy-medium">
+              Custom 4-Color Selection
+            </span>
+            <span className="text-white/40 text-[11px] font-gilroy-medium">
+              Light → Dark
+            </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -740,7 +856,9 @@ const AppearanceTab = ({
                     className="h-4 w-4 rounded-full border border-white/60 shadow-sm shrink-0"
                     style={{ backgroundColor: colorHex }}
                   />
-                  <span className="text-[11px] text-white/90 font-mono tracking-wider">{colorHex.toUpperCase()}</span>
+                  <span className="text-[11px] text-white/90 font-mono tracking-wider">
+                    {colorHex.toUpperCase()}
+                  </span>
                 </div>
                 <input
                   type="color"
@@ -760,8 +878,12 @@ const AppearanceTab = ({
         {/* Text & Accent Color Selector */}
         <div className="flex flex-col gap-3 pt-3 border-t border-white/10 mt-2">
           <div className="flex items-center justify-between">
-            <span className="text-white/80 text-xs font-gilroy-medium">Text & Accent Color</span>
-            <span className="text-white/40 text-[11px] font-gilroy-medium">Select from Theme Shades</span>
+            <span className="text-white/80 text-xs font-gilroy-medium">
+              Text & Accent Color
+            </span>
+            <span className="text-white/40 text-[11px] font-gilroy-medium">
+              Select from Theme Shades
+            </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -771,7 +893,9 @@ const AppearanceTab = ({
                 <button
                   key={idx}
                   type="button"
-                  onClick={() => onThemeTextColorChange && onThemeTextColorChange(idx)}
+                  onClick={() =>
+                    onThemeTextColorChange && onThemeTextColorChange(idx)
+                  }
                   className={`flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border transition-all cursor-pointer active:scale-95 ${
                     isSelected
                       ? "bg-white/20 border-white text-white font-gilroy-bold shadow-md scale-105 ring-2 ring-white/40"
@@ -783,22 +907,30 @@ const AppearanceTab = ({
                       className="h-4 w-4 rounded-full border border-white/60 shadow-sm shrink-0"
                       style={{ backgroundColor: colorHex }}
                     />
-                    <span className="text-[11px] font-mono tracking-wider">{colorHex.toUpperCase()}</span>
+                    <span className="text-[11px] font-mono tracking-wider">
+                      {colorHex.toUpperCase()}
+                    </span>
                   </div>
-                  {isSelected && <i className="ri-check-line text-xs text-white" />}
+                  {isSelected && (
+                    <i className="ri-check-line text-xs text-white" />
+                  )}
                 </button>
               );
             })}
           </div>
         </div>
       </CardContainer>
+      </>}
 
       {/* Base Font Selector */}
+      {section === "typography" && <>
       <CardContainer
-        title="Base Typography Font"
-        description="Select or search for any Google Font to apply as the primary typeface."
+        title="Font"
+        description="Choose a font or search Google Fonts."
         action={
-          baseFont && baseFont !== "Gilroy" && baseFont !== "Default" && (
+          baseFont &&
+          baseFont !== "Gilroy" &&
+          baseFont !== "Default" && (
             <button
               type="button"
               onClick={() => onBaseFontChange && onBaseFontChange("Gilroy")}
@@ -818,20 +950,34 @@ const AppearanceTab = ({
                 <span className="px-2.5 py-0.5 rounded-full bg-[color:var(--theme)]/30 border border-white/20 text-[10px] font-bold text-white uppercase tracking-wider">
                   Active Font
                 </span>
-                <span className="text-xs text-white/60 font-medium truncate">{baseFont || "Gilroy"}</span>
+                <span className="text-xs text-white/60 font-medium truncate">
+                  {baseFont || "Gilroy"}
+                </span>
               </div>
               <p
                 className="text-lg sm:text-xl font-medium text-white truncate mt-0.5"
-                style={{ fontFamily: baseFont === "Gilroy" ? "Gilroy" : `"${baseFont}", sans-serif` }}
+                style={{
+                  fontFamily:
+                    baseFont === "Gilroy"
+                      ? "Gilroy"
+                      : `"${baseFont}", sans-serif`,
+                }}
               >
                 The quick brown fox jumps over the lazy dog
               </p>
             </div>
             <div className="shrink-0 text-right sm:border-l sm:border-white/10 sm:pl-4">
-              <span className="text-[10px] text-white/40 block">Sample Characters</span>
+              <span className="text-[10px] text-white/40 block">
+                Sample Characters
+              </span>
               <span
                 className="text-base sm:text-lg text-white/90 tracking-widest font-bold"
-                style={{ fontFamily: baseFont === "Gilroy" ? "Gilroy" : `"${baseFont}", sans-serif` }}
+                style={{
+                  fontFamily:
+                    baseFont === "Gilroy"
+                      ? "Gilroy"
+                      : `"${baseFont}", sans-serif`,
+                }}
               >
                 Aa Bb 123
               </span>
@@ -903,7 +1049,8 @@ const AppearanceTab = ({
           {/* Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto pr-1.5 scrollbar-hide">
             {filteredFonts.map((f) => {
-              const isSelected = (baseFont || "Gilroy").toLowerCase() === f.name.toLowerCase();
+              const isSelected =
+                (baseFont || "Gilroy").toLowerCase() === f.name.toLowerCase();
               return (
                 <button
                   key={f.name}
@@ -917,7 +1064,9 @@ const AppearanceTab = ({
                 >
                   <div className="flex items-center justify-between w-full mb-1">
                     <div className="flex items-center gap-2 truncate">
-                      <span className="text-xs font-bold text-white truncate">{f.name}</span>
+                      <span className="text-xs font-bold text-white truncate">
+                        {f.name}
+                      </span>
                       {f.cat && (
                         <span className="px-1.5 py-0.2 text-[9px] font-mono rounded bg-white/10 text-white/60">
                           {f.cat}
@@ -933,7 +1082,12 @@ const AppearanceTab = ({
 
                   <p
                     className="text-sm text-white/90 truncate my-1.5"
-                    style={{ fontFamily: f.name === "Gilroy" ? "Gilroy" : `"${f.name}", sans-serif` }}
+                    style={{
+                      fontFamily:
+                        f.name === "Gilroy"
+                          ? "Gilroy"
+                          : `"${f.name}", sans-serif`,
+                    }}
                   >
                     Aa Bb 123 • Quick Fox
                   </p>
@@ -950,8 +1104,7 @@ const AppearanceTab = ({
 
       {/* Font Size Selector (Discrete Slider with Ticks) */}
       <CardContainer
-        title="Font Size Scaling"
-        description="Adjust base typography scale proportionally across all widgets and dashboard elements."
+        title="Font size"
         action={
           baseFontSize !== 16 && (
             <button
@@ -972,9 +1125,12 @@ const AppearanceTab = ({
               <i className="ri-text-spacing text-base text-[color:var(--theme)]" />
               <div>
                 <h4 className="text-xs font-bold text-white">
-                  {FONT_SIZE_TICKS.find((t) => t.value === baseFontSize)?.label || "Custom Size"}
+                  {FONT_SIZE_TICKS.find((t) => t.value === baseFontSize)
+                    ?.label || "Custom Size"}
                 </h4>
-                <p className="text-[11px] text-white/50">Base typography sizing</p>
+                <p className="text-[11px] text-white/50">
+                  Base typography sizing
+                </p>
               </div>
             </div>
             <span className="px-3 py-1 rounded-full bg-white/15 border border-white/20 text-xs font-mono font-bold text-white shadow-sm">
@@ -987,7 +1143,9 @@ const AppearanceTab = ({
             <div className="relative w-full h-8 flex items-center px-2">
               {/* Range Input */}
               {(() => {
-                const tickIdx = FONT_SIZE_TICKS.findIndex((t) => t.value === baseFontSize);
+                const tickIdx = FONT_SIZE_TICKS.findIndex(
+                  (t) => t.value === baseFontSize,
+                );
                 const safeIdx = tickIdx >= 0 ? tickIdx : 2;
                 const percent = (safeIdx / (FONT_SIZE_TICKS.length - 1)) * 100;
 
@@ -1004,7 +1162,8 @@ const AppearanceTab = ({
 
                     {/* Visible Discrete Tick Dots */}
                     {FONT_SIZE_TICKS.map((t, idx) => {
-                      const dotPercent = (idx / (FONT_SIZE_TICKS.length - 1)) * 100;
+                      const dotPercent =
+                        (idx / (FONT_SIZE_TICKS.length - 1)) * 100;
                       const isPastOrCurrent = idx <= safeIdx;
                       const isCurrent = idx === safeIdx;
 
@@ -1020,8 +1179,8 @@ const AppearanceTab = ({
                               isCurrent
                                 ? "h-4 w-4 bg-white ring-4 ring-[color:var(--theme)]/60 shadow-md scale-110"
                                 : isPastOrCurrent
-                                ? "h-3 w-3 bg-white/90 border border-white/80 shadow-sm"
-                                : "h-2.5 w-2.5 bg-white/30 border border-white/40"
+                                  ? "h-3 w-3 bg-white/90 border border-white/80 shadow-sm"
+                                  : "h-2.5 w-2.5 bg-white/30 border border-white/40"
                             }`}
                             style={{ borderRadius: "9999px" }}
                           />
@@ -1037,7 +1196,8 @@ const AppearanceTab = ({
                       step={1}
                       value={safeIdx}
                       onChange={(e) => {
-                        const targetVal = FONT_SIZE_TICKS[Number(e.target.value)]?.value;
+                        const targetVal =
+                          FONT_SIZE_TICKS[Number(e.target.value)]?.value;
                         if (targetVal && onBaseFontSizeChange) {
                           onBaseFontSizeChange(targetVal);
                         }
@@ -1057,15 +1217,21 @@ const AppearanceTab = ({
                   <button
                     key={t.value}
                     type="button"
-                    onClick={() => onBaseFontSizeChange && onBaseFontSizeChange(t.value)}
+                    onClick={() =>
+                      onBaseFontSizeChange && onBaseFontSizeChange(t.value)
+                    }
                     className={`flex flex-col items-center py-1.5 px-1 rounded-xl transition-all cursor-pointer ${
                       isActive
                         ? "bg-white/15 text-white font-bold scale-105 shadow-sm"
                         : "text-white/50 hover:text-white/80 hover:bg-white/5"
                     }`}
                   >
-                    <span className="text-xs font-gilroy-bold truncate w-full">{t.label}</span>
-                    <span className="text-[10px] font-mono opacity-60 mt-0.5">{t.sub}</span>
+                    <span className="text-xs font-gilroy-bold truncate w-full">
+                      {t.label}
+                    </span>
+                    <span className="text-[10px] font-mono opacity-60 mt-0.5">
+                      {t.sub}
+                    </span>
                   </button>
                 );
               })}
@@ -1085,7 +1251,10 @@ const AppearanceTab = ({
             <p
               className="text-white font-gilroy-medium leading-relaxed transition-all truncate"
               style={{
-                fontFamily: baseFont === "Gilroy" ? "Gilroy" : `"${baseFont}", sans-serif`,
+                fontFamily:
+                  baseFont === "Gilroy"
+                    ? "Gilroy"
+                    : `"${baseFont}", sans-serif`,
                 fontSize: `${baseFontSize}px`,
               }}
             >
@@ -1094,38 +1263,157 @@ const AppearanceTab = ({
           </div>
         </div>
       </CardContainer>
+      </>}
     </div>
   );
 };
 
 /* ─── TAB 2: Focus & Reminders ─── */
+const CycleSelect = ({ label, value, options, format, onChange }) => {
+  const id = useId();
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+  const optionRefs = useRef([]);
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [position, setPosition] = useState(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const positionMenu = (event) => {
+      if (event?.type === "scroll" && menuRef.current?.contains(event.target)) return;
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const up = below < 180 && above > below;
+      const maxHeight = Math.max(50, Math.min(220, up ? above : below));
+      setPosition({ left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)), width: rect.width, maxHeight, ...(up ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }) });
+    };
+    const outside = (event) => {
+      if (!triggerRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setOpen(false);
+    };
+    const escape = (event) => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); triggerRef.current?.focus(); }
+    };
+    positionMenu();
+    document.addEventListener("pointerdown", outside, true);
+    document.addEventListener("keydown", escape, true);
+    window.addEventListener("resize", positionMenu);
+    window.addEventListener("scroll", positionMenu, true);
+    return () => {
+      document.removeEventListener("pointerdown", outside, true);
+      document.removeEventListener("keydown", escape, true);
+      window.removeEventListener("resize", positionMenu);
+      window.removeEventListener("scroll", positionMenu, true);
+    };
+  }, [open]);
+
+  useEffect(() => { if (open) optionRefs.current[activeIndex]?.scrollIntoView({ block: "nearest" }); }, [activeIndex, open]);
+  const showMenu = () => { setActiveIndex(Math.max(0, options.indexOf(value))); setPosition(null); setOpen(true); };
+  const choose = (index) => { onChange(options[index]); setOpen(false); triggerRef.current?.focus(); };
+  const handleKeyDown = (event) => {
+    if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      if (!open) { showMenu(); return; }
+      setActiveIndex((current) => event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : Math.max(0, Math.min(options.length - 1, current + (event.key === "ArrowDown" ? 1 : -1))));
+    } else if (open && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      choose(activeIndex);
+    } else if (event.key === "Tab") setOpen(false);
+  };
+
+  return <div className="min-w-0 text-xs text-white/70">
+    <span id={`${id}-label`}>{label}</span>
+    <button ref={triggerRef} type="button" role="combobox" aria-labelledby={`${id}-label ${id}-value`} aria-expanded={open} aria-controls={open ? `${id}-list` : undefined} aria-activedescendant={open ? `${id}-option-${activeIndex}` : undefined} aria-haspopup="listbox" onKeyDown={handleKeyDown} onClick={() => open ? setOpen(false) : showMenu()} className="cycle-select-trigger mt-1.5 w-full h-10 rounded-xl border px-3 text-xs font-gilroy-bold cursor-pointer flex items-center justify-between gap-2 transition-colors">
+      <span id={`${id}-value`} className="truncate">{format(value)}</span><i className={`ri-arrow-${open ? "up" : "down"}-s-line text-base shrink-0`} aria-hidden="true" />
+    </button>
+    {open && createPortal(<div ref={menuRef} style={{ position: "fixed", zIndex: 500, ...(position || { visibility: "hidden" }) }} className="cycle-select-menu">
+      <div id={`${id}-list`} role="listbox" aria-labelledby={`${id}-label`} style={{ maxHeight: Math.max(40, (position?.maxHeight || 220) - 10), overflowY: "auto", overscrollBehavior: "contain" }} className="scrollbar-hide">
+        {options.map((option, index) => <button ref={(node) => { optionRefs.current[index] = node; }} key={option} id={`${id}-option-${index}`} type="button" role="option" aria-selected={option === value} data-active={index === activeIndex} tabIndex={-1} onClick={() => choose(index)} className="cycle-select-option">
+          <span>{format(option)}</span>{option === value && <i className="ri-check-line" aria-hidden="true" />}
+        </button>)}
+      </div>
+    </div>, document.body)}
+  </div>;
+};
+
+const FocusCycleSettings = () => {
+  const [cycle, setCycle] = useState(DEFAULT_FOCUS_CYCLE);
+  useEffect(() => {
+    let active = true;
+    storageGet(FOCUS_CYCLE_KEY).then((value) => { if (active) setCycle(normalizeFocusCycle(value)); });
+    const unsubscribe = subscribeStorageKey(FOCUS_CYCLE_KEY, (value) => setCycle(normalizeFocusCycle(value)));
+    return () => { active = false; unsubscribe(); };
+  }, []);
+  const update = (patch) => {
+    const next = normalizeFocusCycle({ ...cycle, ...patch });
+    setCycle(next);
+    storageSet(FOCUS_CYCLE_KEY, next).then(() => window.dispatchEvent(new Event(FOCUS_CYCLE_EVENT)));
+  };
+  const totalMinutes = cycle.focusMinutes * cycle.sessions + cycle.restMinutes * (cycle.sessions - 1);
+  return <div className="flex flex-col gap-3 pb-4 border-b border-white/10">
+    <div className="flex items-center justify-between gap-4">
+      <div><h4 className="text-white text-xs font-gilroy-bold">Focus cycle</h4><p className="text-white/50 text-[11px] mt-1">Automatically alternate focus and rest.</p></div>
+      <Toggle checked={cycle.enabled} onChange={(enabled) => update({ enabled })} />
+    </div>
+    {cycle.enabled && <>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <CycleSelect label="Focus" value={cycle.focusMinutes} options={Array.from({ length: 12 }, (_, index) => (index + 1) * 5)} format={(minutes) => `${minutes} min`} onChange={(focusMinutes) => update({ focusMinutes })} />
+        <CycleSelect label="Rest" value={cycle.restMinutes} options={Array.from({ length: 12 }, (_, index) => (index + 1) * 5)} format={(minutes) => `${minutes} min`} onChange={(restMinutes) => update({ restMinutes })} />
+        <CycleSelect label="Focus sessions" value={cycle.sessions} options={Array.from({ length: 12 }, (_, index) => index + 1)} format={String} onChange={(sessions) => update({ sessions })} />
+      </div>
+      <p className="text-[11px] text-white/60">{cycle.sessions} focus {cycle.sessions === 1 ? "session" : "sessions"} · {Math.floor(totalMinutes / 60) > 0 ? `${Math.floor(totalMinutes / 60)}h ` : ""}{totalMinutes % 60 ? `${totalMinutes % 60}m ` : ""}total · no rest after the last session</p>
+      <p className="text-[11px] text-white/45">Changes apply the next time you start a cycle.</p>
+    </>}
+  </div>;
+};
+
 const FocusTab = ({
-  focusNotifEnabled, onFocusNotifChange,
-  focusEndRingtone, onFocusEndRingtoneChange,
-  restEndRingtone, onRestEndRingtoneChange,
-  waterGoalMl, onWaterGoalChange,
-  waterNotifEnabled, onWaterNotifChange,
-  waterRingtone, onWaterRingtoneChange,
+  focusNotifEnabled,
+  onFocusNotifChange,
+  focusEndRingtone,
+  onFocusEndRingtoneChange,
+  restEndRingtone,
+  onRestEndRingtoneChange,
+  waterGoalMl,
+  onWaterGoalChange,
+  waterNotifEnabled,
+  onWaterNotifChange,
+  waterRingtone,
+  onWaterRingtoneChange,
 }) => (
   <div className="flex flex-col gap-6">
     {/* Focus Timer */}
     <CardContainer
-      title="Focus Timer Settings"
-      description="Configure audio alerts and completion ringtones for Focus and Rest pomodoro sessions."
+      title="Focus timer"
     >
       <div className="flex flex-col gap-3.5 pt-3 border-t border-white/10">
+        <FocusCycleSettings />
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="text-white text-xs font-gilroy-bold">Audio Sound Alerts</h4>
-            <p className="text-white/50 text-[11px] font-gilroy-medium">Play ringtone when timer session completes</p>
+            <h4 className="text-white text-xs font-gilroy-bold">
+              End-of-session sound
+            </h4>
+            <p className="text-white/50 text-[11px] font-gilroy-medium">
+              Play ringtone when timer session completes
+            </p>
           </div>
           <Toggle checked={focusNotifEnabled} onChange={onFocusNotifChange} />
         </div>
 
         {focusNotifEnabled && (
           <div className="flex flex-col gap-3.5 pl-3.5 border-l-2 border-white/20 my-1 pt-1">
-            <RingtoneRow label="Focus Session Completion Ringtone" value={focusEndRingtone} onChange={onFocusEndRingtoneChange} />
-            <RingtoneRow label="Rest Session Completion Ringtone" value={restEndRingtone} onChange={onRestEndRingtoneChange} />
+            <RingtoneRow
+              label="Focus sound"
+              value={focusEndRingtone}
+              onChange={onFocusEndRingtoneChange}
+            />
+            <RingtoneRow
+              label="Rest sound"
+              value={restEndRingtone}
+              onChange={onRestEndRingtoneChange}
+            />
           </div>
         )}
       </div>
@@ -1133,18 +1421,25 @@ const FocusTab = ({
 
     {/* Water Reminder */}
     <CardContainer
-      title="Water Reminder Settings"
-      description="Customize your daily target hydration goal and sound alert preferences."
+      title="Water reminder"
     >
       <div className="flex flex-col gap-4 pt-3 border-t border-white/10">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h4 className="text-white text-xs font-gilroy-bold">Daily Target Hydration Goal</h4>
-            <p className="text-white/50 text-[11px] font-gilroy-medium">Select your target daily water intake</p>
+            <h4 className="text-white text-xs font-gilroy-bold">
+              Daily goal
+            </h4>
+            <p className="text-white/50 text-[11px] font-gilroy-medium">
+              Select your target daily water intake
+            </p>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {WATER_GOALS.map((g) => (
-              <Pill key={g.value} active={waterGoalMl === g.value} onClick={() => onWaterGoalChange(g.value)}>
+              <Pill
+                key={g.value}
+                active={waterGoalMl === g.value}
+                onClick={() => onWaterGoalChange(g.value)}
+              >
                 {g.label}
               </Pill>
             ))}
@@ -1153,15 +1448,23 @@ const FocusTab = ({
 
         <div className="flex items-center justify-between pt-3 border-t border-white/10">
           <div>
-            <h4 className="text-white text-xs font-gilroy-bold">Reminder Sound Notifications</h4>
-            <p className="text-white/50 text-[11px] font-gilroy-medium">Chime alert when it's time to drink water</p>
+            <h4 className="text-white text-xs font-gilroy-bold">
+              Reminder sound
+            </h4>
+            <p className="text-white/50 text-[11px] font-gilroy-medium">
+              Chime alert when it's time to drink water
+            </p>
           </div>
           <Toggle checked={waterNotifEnabled} onChange={onWaterNotifChange} />
         </div>
 
         {waterNotifEnabled && (
           <div className="pl-3.5 border-l-2 border-white/20 my-1 pt-1">
-            <RingtoneRow label="Hydration Reminder Alert Ringtone" value={waterRingtone} onChange={onWaterRingtoneChange} />
+            <RingtoneRow
+              label="Reminder tone"
+              value={waterRingtone}
+              onChange={onWaterRingtoneChange}
+            />
           </div>
         )}
       </div>
@@ -1169,20 +1472,164 @@ const FocusTab = ({
   </div>
 );
 
+/* ─── TAB: Dynamic Island ─── */
+const SiteListEditor = ({ sites, onChange, placeholder }) => {
+  const [domain, setDomain] = useState("");
+
+  const list = Array.isArray(sites) ? sites : [];
+
+  const normalizeDomain = (value) =>
+    String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .replace(/\/.*$/, "");
+
+  const addSite = () => {
+    const clean = normalizeDomain(domain);
+    if (!clean) return;
+    if (list.some((s) => normalizeDomain(s.domain) === clean)) {
+      setDomain("");
+      return;
+    }
+    onChange([...list, { id: makeId(), domain: clean, label: "" }]);
+    setDomain("");
+  };
+
+  const removeSite = (id) => onChange(list.filter((s) => s.id !== id));
+
+  return (
+    <div className="flex flex-col gap-3.5 pt-3 border-t border-white/10">
+      <div className="flex gap-2.5">
+        <InputField
+          value={domain}
+          onChange={(e) => setDomain(e.target.value)}
+          placeholder={placeholder}
+          className="flex-1 min-w-0"
+        />
+        <button
+          type="button"
+          onClick={addSite}
+          className="px-4 py-2.5 rounded-2xl bg-[color:var(--theme)] hover:brightness-110 text-white font-gilroy-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-md whitespace-nowrap shrink-0"
+        >
+          <i className="ri-add-line text-sm relative z-10" />
+          <span className="relative z-10">Add Site</span>
+        </button>
+      </div>
+
+      {list.length === 0 ? (
+        <p className="text-white/40 text-xs font-gilroy-medium italic py-1">
+          No sites added yet
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {list.map((site) => (
+            <div
+              key={site.id}
+              className="flex items-center gap-2.5 bg-black/25 border border-white/10 hover:border-white/20 rounded-2xl px-3 py-2.5 transition-all shadow-sm"
+            >
+              <span
+                className="flex-1 min-w-0 text-white text-xs font-gilroy-bold truncate"
+                title={site.domain}
+              >
+                {site.domain}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeSite(site.id)}
+                title="Remove site"
+                className="h-8 w-8 rounded-full bg-[color:var(--theme)]/20 hover:bg-red-500/30 border border-white/15 flex items-center justify-center text-white/70 hover:text-white transition-all active:scale-95 cursor-pointer shrink-0"
+              >
+                <i className="ri-delete-bin-line text-sm relative z-10" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const IslandTab = ({
+  islandEnabled,
+  onIslandEnabledChange,
+  focusSites,
+  onFocusSitesChange,
+  distractionSites,
+  onDistractionSitesChange,
+  onResetIslandPosition,
+}) => (
+  <div className="flex flex-col gap-6">
+    <CardContainer
+      title="Dynamic Island"
+      description="Show your focus status on websites."
+      action={
+        <Toggle checked={islandEnabled} onChange={onIslandEnabledChange} />
+      }
+    >
+      <div className="flex flex-col gap-3.5 pt-3 border-t border-white/10">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h4 className="text-white text-xs font-gilroy-bold">
+              Island Position
+            </h4>
+            <p className="text-white/50 text-[11px] font-gilroy-medium">
+              Return the island to the top centre of the screen
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onResetIslandPosition}
+            className="px-3.5 py-2 rounded-2xl bg-[color:var(--theme)]/25 hover:bg-[color:var(--theme)]/45 border border-white/20 text-white font-gilroy-bold text-xs transition-all active:scale-95 cursor-pointer shrink-0 whitespace-nowrap"
+          >
+            Reset Position
+          </button>
+        </div>
+      </div>
+    </CardContainer>
+
+    {/* Work and Distraction lists side by side (stacked on narrow screens) */}
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+      <CardContainer title="Work Sites">
+        <SiteListEditor
+          sites={focusSites}
+          onChange={onFocusSitesChange}
+          placeholder="e.g. github.com"
+        />
+      </CardContainer>
+
+      <CardContainer title="Distraction Sites">
+        <SiteListEditor
+          sites={distractionSites}
+          onChange={onDistractionSitesChange}
+          placeholder="e.g. youtube.com"
+        />
+      </CardContainer>
+    </div>
+  </div>
+);
+
 /* ─── TAB 3: Song Player Settings ─── */
 const SongPlayerTab = ({
-  _showSongPlayer, _onShowSongPlayerChange,
-  _songPlaylistUrl, _onSongPlaylistUrlChange,
-  songAutoPlay, onSongAutoPlayChange,
-  songCustomVideo, onSongCustomVideoChange,
-  lofiStations, onLofiStationsChange,
+  section = "songPlayer",
+  _showSongPlayer,
+  _onShowSongPlayerChange,
+  _songPlaylistUrl,
+  _onSongPlaylistUrlChange,
+  songAutoPlay,
+  onSongAutoPlayChange,
+  songCustomVideo,
+  onSongCustomVideoChange,
+  lofiStations,
+  onLofiStationsChange,
 }) => {
   const videoInputRef = useRef(null);
 
   const handleUpdateStation = (id, field, value) => {
     if (!onLofiStationsChange) return;
     const updated = (lofiStations || []).map((st) =>
-      st.id === id ? { ...st, [field]: value } : st
+      st.id === id ? { ...st, [field]: value } : st,
     );
     onLofiStationsChange(updated);
   };
@@ -1219,7 +1666,9 @@ const SongPlayerTab = ({
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 15 * 1024 * 1024) {
-      alert("Please choose a video/GIF under 15MB for optimal browser performance.");
+      alert(
+        "Please choose a video/GIF under 15MB for optimal browser performance.",
+      );
       return;
     }
     const reader = new FileReader();
@@ -1233,27 +1682,34 @@ const SongPlayerTab = ({
     reader.readAsDataURL(file);
   };
 
-  const videoSrc = typeof songCustomVideo === "string" ? songCustomVideo : songCustomVideo?.dataUrl;
+  const videoSrc =
+    typeof songCustomVideo === "string"
+      ? songCustomVideo
+      : songCustomVideo?.dataUrl;
 
   return (
-  <div className="flex flex-col gap-6">
-    {/* Song Player */}
-    <CardContainer
-      title="Song Player Settings"
-      description="24/7 Lofi live streaming radio from dedicated servers. Use Next/Prev controls to switch streaming services, or upload a custom video for the player container."
-    >
-      <div className="flex flex-col gap-5 pt-3 border-t border-white/10">
+    <div className="flex flex-col gap-6">
+      {/* Song Player */}
+      <CardContainer
+        title={section === "stations" ? "Radio stations" : "Music player"}
+      >
+        <div className="flex flex-col gap-5 pt-3 border-t border-white/10">
           {/* Custom Player Video Background */}
+          {section === "songPlayer" && <>
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <i className="ri-vidicon-line text-sm text-[color:var(--theme)]" />
-                <span className="text-white/90 text-xs font-gilroy-bold">Custom Video / GIF Background</span>
+                <span className="text-white/90 text-xs font-gilroy-bold">
+                  Player background
+                </span>
               </div>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => onSongCustomVideoChange(DEFAULT_SONG_CUSTOM_VIDEO)}
+                  onClick={() =>
+                    onSongCustomVideoChange(DEFAULT_SONG_CUSTOM_VIDEO)
+                  }
                   className="text-[11px] text-[color:var(--theme)] hover:brightness-125 underline cursor-pointer transition-colors font-gilroy-medium"
                 >
                   Reset to Default GIF
@@ -1270,7 +1726,7 @@ const SongPlayerTab = ({
               </div>
             </div>
             <p className="text-white/50 text-[11px] font-gilroy-medium leading-relaxed">
-              Upload a video/GIF file (.mp4, .webm, .gif) or paste an online video / GIF link URL to display inside the Song Player container.
+              Upload a video or GIF, or paste a direct link.
             </p>
 
             <input
@@ -1283,13 +1739,17 @@ const SongPlayerTab = ({
 
             <div className="flex flex-col gap-2.5 mt-1">
               <InputField
-                value={videoSrc && !videoSrc.startsWith("data:") ? videoSrc : ""}
+                value={
+                  videoSrc && !videoSrc.startsWith("data:") ? videoSrc : ""
+                }
                 onChange={(e) => {
                   const val = e.target.value;
                   if (!val.trim()) {
                     onSongCustomVideoChange(null);
                   } else {
-                    const isVid = Boolean(val.match(/\.(mp4|webm|ogg|mov)(\?.*)?$/i));
+                    const isVid = Boolean(
+                      val.match(/\.(mp4|webm|ogg|mov)(\?.*)?$/i),
+                    );
                     onSongCustomVideoChange({
                       dataUrl: val.trim(),
                       name: "Online Link",
@@ -1309,7 +1769,7 @@ const SongPlayerTab = ({
                   title="Upload local file"
                 >
                   <i className="ri-folder-open-line text-sm" />
-                  <span>Upload Local Video / GIF File</span>
+                  <span>Upload video or GIF</span>
                 </button>
               </div>
 
@@ -1317,10 +1777,23 @@ const SongPlayerTab = ({
                 <div className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-white/5 border border-white/10 mt-1">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="h-12 w-20 rounded-xl overflow-hidden border border-white/20 bg-black/60 relative shrink-0 shadow-md">
-                      {songCustomVideo?.type?.startsWith("video/") || videoSrc.match(/\.(mp4|webm|ogg|mov)(\?.*)?$/i) || videoSrc.startsWith("data:video/") ? (
-                        <video src={videoSrc} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                      {songCustomVideo?.type?.startsWith("video/") ||
+                      videoSrc.match(/\.(mp4|webm|ogg|mov)(\?.*)?$/i) ||
+                      videoSrc.startsWith("data:video/") ? (
+                        <video
+                          src={videoSrc}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
-                        <img src={videoSrc} alt="Preview" className="w-full h-full object-cover" />
+                        <img
+                          src={videoSrc}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -1329,11 +1802,15 @@ const SongPlayerTab = ({
                           {songCustomVideo?.name || "Active Background"}
                         </p>
                         <span className="px-2 py-0.5 rounded-md bg-white/10 text-[9px] font-gilroy-bold text-white/70 uppercase">
-                          {videoSrc.startsWith("data:") ? "Local File" : "Web Link"}
+                          {videoSrc.startsWith("data:")
+                            ? "Local File"
+                            : "Web Link"}
                         </span>
                       </div>
                       <p className="text-white/40 text-[10.5px] font-gilroy-medium truncate mt-0.5">
-                        {videoSrc.startsWith("data:") ? "Local File Upload" : videoSrc}
+                        {videoSrc.startsWith("data:")
+                          ? "Local File Upload"
+                          : videoSrc}
                       </p>
                     </div>
                   </div>
@@ -1350,17 +1827,21 @@ const SongPlayerTab = ({
               )}
             </div>
           </div>
+          </>}
 
           {/* 24/7 Lofi Stream Stations Manager */}
+          {section === "stations" && (
           <div className="flex flex-col gap-3 pt-4 border-t border-white/10">
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <i className="ri-radio-2-line text-sm text-[color:var(--theme)]" />
-                  <span className="text-white/90 text-xs font-gilroy-bold">Manage 24/7 Lofi Live Stream Stations</span>
+                  <span className="text-white/90 text-xs font-gilroy-bold">
+                    Stations
+                  </span>
                 </div>
                 <p className="text-white/50 text-[11px] font-gilroy-medium mt-0.5">
-                  Edit station names, badge labels, or audio stream URLs. Click Next/Prev in the player to cycle through them.
+                  Edit station names and stream URLs.
                 </p>
               </div>
               <button
@@ -1368,7 +1849,7 @@ const SongPlayerTab = ({
                 onClick={handleResetStations}
                 className="text-[11px] text-white/60 hover:text-white underline cursor-pointer transition-colors shrink-0 ml-2"
               >
-                Reset Default Stations
+                Reset stations
               </button>
             </div>
 
@@ -1379,19 +1860,29 @@ const SongPlayerTab = ({
                   className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-black/25 border border-white/10 hover:border-white/20 transition-all shadow-sm group"
                 >
                   <div className="h-9 w-9 rounded-xl bg-[color:var(--theme)]/20 border border-white/15 flex items-center justify-center shrink-0 shadow-inner">
-                    <span className="text-[11px] font-gilroy-bold text-white/90">#{idx + 1}</span>
+                    <span className="text-[11px] font-gilroy-bold text-white/90">
+                      #{idx + 1}
+                    </span>
                   </div>
 
                   <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <InputField
                       value={station.name || ""}
-                      onChange={(e) => handleUpdateStation(station.id, "name", e.target.value)}
+                      onChange={(e) =>
+                        handleUpdateStation(station.id, "name", e.target.value)
+                      }
                       placeholder="Station Name"
                       className="w-full"
                     />
                     <InputField
                       value={station.streamUrl || ""}
-                      onChange={(e) => handleUpdateStation(station.id, "streamUrl", e.target.value)}
+                      onChange={(e) =>
+                        handleUpdateStation(
+                          station.id,
+                          "streamUrl",
+                          e.target.value,
+                        )
+                      }
                       placeholder="Stream URL (https://...)"
                       className="w-full"
                     />
@@ -1414,27 +1905,40 @@ const SongPlayerTab = ({
                 className="w-full py-3 rounded-2xl bg-[color:var(--theme)]/30 hover:bg-[color:var(--theme)]/50 border border-white/20 text-xs text-white font-gilroy-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.99] shadow-md mt-1"
               >
                 <i className="ri-add-line text-base" />
-                <span>Add Custom Lofi Station</span>
+                <span>Add station</span>
               </button>
             </div>
           </div>
+          )}
 
+          {section === "songPlayer" && (
           <div className="flex items-center justify-between pt-3 border-t border-white/10">
             <div>
-              <span className="text-white/90 text-xs font-gilroy-medium">Auto-Play Lofi Stream</span>
-              <p className="text-white/50 text-[11px] font-gilroy-medium">Automatically start streaming music when dashboard opens</p>
+              <span className="text-white/90 text-xs font-gilroy-medium">
+                Autoplay
+              </span>
+              <p className="text-white/50 text-[11px] font-gilroy-medium">
+                Automatically start streaming music when dashboard opens
+              </p>
             </div>
             <Toggle checked={songAutoPlay} onChange={onSongAutoPlayChange} />
           </div>
+          )}
         </div>
       </CardContainer>
-  </div>
+    </div>
   );
 };
 
 /* ─── TAB 4: Taskbar Shortcuts ─── */
 const TaskbarTab = ({
-  shortcuts, onShortcutUpdate, onShortcutRemove, onShortcutAdd, onShortcutIconPick, onShortcutsReorder, uiTheme = "default",
+  shortcuts,
+  onShortcutUpdate,
+  onShortcutRemove,
+  onShortcutAdd,
+  onShortcutIconPick,
+  onShortcutsReorder,
+  uiTheme = "default",
 }) => {
   const [iconPickerShortcutId, setIconPickerShortcutId] = useState(null);
   const buttonRefs = useRef({});
@@ -1482,8 +1986,8 @@ const TaskbarTab = ({
       {/* Taskbar Shortcuts */}
       <CardContainer
         overflowVisible={anyPickerOpen}
-        title="Taskbar Quick Launchers"
-        description="Customize AI tools, developer bookmarks, and custom web links in your top taskbar. Drag shortcut cards up or down to reorder them."
+        title="Quick links"
+        description="Drag links to reorder them."
         action={
           <button
             type="button"
@@ -1509,13 +2013,15 @@ const TaskbarTab = ({
                 onDrop={(e) => handleDrop(e, idx)}
                 onDragEnd={handleDragEnd}
                 className={`bg-black/25 border rounded-2xl transition-all shadow-sm relative ${
-                  iconPickerShortcutId === s.id ? "z-30 overflow-visible" : "z-10 overflow-hidden"
+                  iconPickerShortcutId === s.id
+                    ? "z-30 overflow-visible"
+                    : "z-10 overflow-hidden"
                 } ${
                   isDragging
                     ? "opacity-40 border-dashed border-white/40 scale-[0.99]"
                     : isDragOver
-                    ? "border-[color:var(--theme)] bg-[color:var(--theme)]/15 scale-[1.01]"
-                    : "border-white/10 hover:border-white/20"
+                      ? "border-[color:var(--theme)] bg-[color:var(--theme)]/15 scale-[1.01]"
+                      : "border-white/10 hover:border-white/20"
                 }`}
               >
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-3">
@@ -1534,17 +2040,32 @@ const TaskbarTab = ({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setIconPickerShortcutId(iconPickerShortcutId === s.id ? null : s.id);
+                        setIconPickerShortcutId(
+                          iconPickerShortcutId === s.id ? null : s.id,
+                        );
                       }}
                       className="h-10 w-10 rounded-2xl bg-[color:var(--theme)]/20 hover:bg-[color:var(--theme)]/40 border border-white/20 flex items-center justify-center text-white transition-all cursor-pointer shrink-0 group/ic active:scale-95 shadow-inner"
                       title="Change Icon"
                     >
                       {s.iconDataUrl || s.iconUrl ? (
-                        <img src={s.iconDataUrl || s.iconUrl} alt="" className="h-5 w-5 object-contain" />
-                      ) : s.iconClass && (s.iconClass.startsWith("img:") || s.iconClass.startsWith("http") || s.iconClass.startsWith("data:")) ? (
-                        <img src={s.iconClass.replace(/^img:/, "")} alt="" className="h-5 w-5 object-contain" />
+                        <img
+                          src={s.iconDataUrl || s.iconUrl}
+                          alt=""
+                          className="h-5 w-5 object-contain"
+                        />
+                      ) : s.iconClass &&
+                        (s.iconClass.startsWith("img:") ||
+                          s.iconClass.startsWith("http") ||
+                          s.iconClass.startsWith("data:")) ? (
+                        <img
+                          src={s.iconClass.replace(/^img:/, "")}
+                          alt=""
+                          className="h-5 w-5 object-contain"
+                        />
                       ) : s.iconClass ? (
-                        <i className={`${s.iconClass} text-white text-xl group-hover/ic:scale-110 transition-transform`} />
+                        <i
+                          className={`${s.iconClass} text-white text-xl group-hover/ic:scale-110 transition-transform`}
+                        />
                       ) : (
                         <i className="ri-link text-white text-xl" />
                       )}
@@ -1554,7 +2075,13 @@ const TaskbarTab = ({
                       <IconDropdownPopover
                         triggerRef={{ current: buttonRefs.current[s.id] }}
                         current={s.iconClass}
-                        onSelect={(ic) => onShortcutUpdate(s.id, { iconClass: ic, iconDataUrl: null, iconUrl: null })}
+                        onSelect={(ic) =>
+                          onShortcutUpdate(s.id, {
+                            iconClass: ic,
+                            iconDataUrl: null,
+                            iconUrl: null,
+                          })
+                        }
                         onClose={() => setIconPickerShortcutId(null)}
                         uiTheme={uiTheme}
                       />
@@ -1564,13 +2091,17 @@ const TaskbarTab = ({
                   <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <InputField
                       value={s.title ?? ""}
-                      onChange={(e) => onShortcutUpdate(s.id, { title: e.target.value })}
+                      onChange={(e) =>
+                        onShortcutUpdate(s.id, { title: e.target.value })
+                      }
                       placeholder="Title"
                       className="w-full"
                     />
                     <InputField
                       value={s.url ?? ""}
-                      onChange={(e) => onShortcutUpdate(s.id, { url: e.target.value })}
+                      onChange={(e) =>
+                        onShortcutUpdate(s.id, { url: e.target.value })
+                      }
                       placeholder="https://..."
                       className="w-full"
                     />
@@ -1582,11 +2113,15 @@ const TaskbarTab = ({
                       accept="image/*"
                       className="hidden"
                       id={`sc-icon-${s.id}`}
-                      onChange={(e) => onShortcutIconPick(s.id, e.target.files?.[0])}
+                      onChange={(e) =>
+                        onShortcutIconPick(s.id, e.target.files?.[0])
+                      }
                     />
                     <button
                       type="button"
-                      onClick={() => document.getElementById(`sc-icon-${s.id}`)?.click()}
+                      onClick={() =>
+                        document.getElementById(`sc-icon-${s.id}`)?.click()
+                      }
                       className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white cursor-pointer transition-all active:scale-95 flex items-center gap-1.5 shrink-0"
                       title="Upload image favicon"
                     >
@@ -1613,7 +2148,13 @@ const TaskbarTab = ({
 };
 
 /* ─── TAB 4: Important Tabs ─── */
-const ImportantTabsTab = ({ _showImportantTabs, _onShowImportantTabsChange, importantTabsConfig, onImportantTabsConfigChange, uiTheme = "default" }) => {
+const ImportantTabsTab = ({
+  _showImportantTabs,
+  _onShowImportantTabsChange,
+  importantTabsConfig,
+  onImportantTabsConfigChange,
+  uiTheme = "default",
+}) => {
   const [iconPickerTabId, setIconPickerTabId] = useState(null);
   const [expandedTabId, setExpandedTabId] = useState(null);
   const buttonRefs = useRef({});
@@ -1655,15 +2196,23 @@ const ImportantTabsTab = ({ _showImportantTabs, _onShowImportantTabsChange, impo
   };
 
   const addTab = () => {
-    const newTab = { id: makeId(), title: "New Tab Group", iconClass: "ri-globe-line", links: [] };
+    const newTab = {
+      id: makeId(),
+      title: "New Tab Group",
+      iconClass: "ri-globe-line",
+      links: [],
+    };
     onImportantTabsConfigChange([...importantTabsConfig, newTab]);
     setExpandedTabId(newTab.id);
   };
 
-  const removeTab = (id) => onImportantTabsConfigChange(importantTabsConfig.filter((t) => t.id !== id));
+  const removeTab = (id) =>
+    onImportantTabsConfigChange(importantTabsConfig.filter((t) => t.id !== id));
 
   const updateTab = (id, patch) =>
-    onImportantTabsConfigChange(importantTabsConfig.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    onImportantTabsConfigChange(
+      importantTabsConfig.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+    );
 
   const addLink = (tabId) => {
     const tab = importantTabsConfig.find((t) => t.id === tabId);
@@ -1690,8 +2239,8 @@ const ImportantTabsTab = ({ _showImportantTabs, _onShowImportantTabsChange, impo
   return (
     <CardContainer
       overflowVisible={anyPickerOpen}
-      title="Important Tabs Bundles"
-      description="Organize multiple website links into one-click tab groups. Drag tab cards up or down to reorder them."
+      title="Tab groups"
+      description="Organize links into groups and drag to reorder them."
     >
       <div className="flex flex-col gap-4 pt-3 border-t border-white/10">
         <div className="flex flex-col gap-4">
@@ -1708,13 +2257,15 @@ const ImportantTabsTab = ({ _showImportantTabs, _onShowImportantTabsChange, impo
                 onDrop={(e) => handleDrop(e, idx)}
                 onDragEnd={handleDragEnd}
                 className={`bg-black/25 border rounded-2xl transition-all shadow-sm relative ${
-                  iconPickerTabId === tab.id ? "z-30 overflow-visible" : "z-10 overflow-hidden"
+                  iconPickerTabId === tab.id
+                    ? "z-30 overflow-visible"
+                    : "z-10 overflow-hidden"
                 } ${
                   isDragging
                     ? "opacity-40 border-dashed border-white/40 scale-[0.99]"
                     : isDragOver
-                    ? "border-[color:var(--theme)] bg-[color:var(--theme)]/15 scale-[1.01]"
-                    : "border-white/10 hover:border-white/20"
+                      ? "border-[color:var(--theme)] bg-[color:var(--theme)]/15 scale-[1.01]"
+                      : "border-white/10 hover:border-white/20"
                 }`}
               >
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 p-3">
@@ -1733,15 +2284,26 @@ const ImportantTabsTab = ({ _showImportantTabs, _onShowImportantTabsChange, impo
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setIconPickerTabId(iconPickerTabId === tab.id ? null : tab.id);
+                        setIconPickerTabId(
+                          iconPickerTabId === tab.id ? null : tab.id,
+                        );
                       }}
                       className="h-10 w-10 rounded-2xl bg-[color:var(--theme)]/25 hover:bg-[color:var(--theme)]/45 border border-white/20 flex items-center justify-center text-white text-xl transition-all shrink-0 cursor-pointer active:scale-95 shadow-sm"
                       title="Change Icon"
                     >
-                      {tab.iconClass && (tab.iconClass.startsWith("img:") || tab.iconClass.startsWith("http") || tab.iconClass.startsWith("data:")) ? (
-                        <img src={tab.iconClass.replace(/^img:/, "")} alt="" className="h-5 w-5 object-contain" />
+                      {tab.iconClass &&
+                      (tab.iconClass.startsWith("img:") ||
+                        tab.iconClass.startsWith("http") ||
+                        tab.iconClass.startsWith("data:")) ? (
+                        <img
+                          src={tab.iconClass.replace(/^img:/, "")}
+                          alt=""
+                          className="h-5 w-5 object-contain"
+                        />
                       ) : (
-                        <i className={`${tab.iconClass || "ri-globe-line"} relative z-10`} />
+                        <i
+                          className={`${tab.iconClass || "ri-globe-line"} relative z-10`}
+                        />
                       )}
                     </button>
 
@@ -1759,7 +2321,9 @@ const ImportantTabsTab = ({ _showImportantTabs, _onShowImportantTabsChange, impo
                   <div className="flex-1 min-w-0">
                     <InputField
                       value={tab.title}
-                      onChange={(e) => updateTab(tab.id, { title: e.target.value })}
+                      onChange={(e) =>
+                        updateTab(tab.id, { title: e.target.value })
+                      }
                       placeholder="Tab Group Title"
                       className="w-full font-gilroy-bold"
                     />
@@ -1768,11 +2332,19 @@ const ImportantTabsTab = ({ _showImportantTabs, _onShowImportantTabsChange, impo
                   <div className="flex items-center gap-2 shrink-0 ml-auto">
                     <button
                       type="button"
-                      onClick={() => setExpandedTabId(expandedTabId === tab.id ? null : tab.id)}
+                      onClick={() =>
+                        setExpandedTabId(
+                          expandedTabId === tab.id ? null : tab.id,
+                        )
+                      }
                       className="h-10 px-3.5 rounded-2xl bg-[color:var(--theme)]/25 hover:bg-[color:var(--theme)]/45 border border-white/20 text-xs text-white/80 hover:text-white cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shrink-0"
                     >
-                      <span className="text-xs font-gilroy-medium">{tab.links?.length || 0} links</span>
-                      <i className={`ri-arrow-${expandedTabId === tab.id ? "up" : "down"}-s-line text-sm relative z-10`} />
+                      <span className="text-xs font-gilroy-medium">
+                        {tab.links?.length || 0} links
+                      </span>
+                      <i
+                        className={`ri-arrow-${expandedTabId === tab.id ? "up" : "down"}-s-line text-sm relative z-10`}
+                      />
                     </button>
                     <button
                       type="button"
@@ -1793,7 +2365,11 @@ const ImportantTabsTab = ({ _showImportantTabs, _onShowImportantTabsChange, impo
                         <div className="w-36 shrink-0">
                           <InputField
                             value={link.label}
-                            onChange={(e) => updateLink(tab.id, link.id, { label: e.target.value })}
+                            onChange={(e) =>
+                              updateLink(tab.id, link.id, {
+                                label: e.target.value,
+                              })
+                            }
                             placeholder="Label (e.g. Docs)"
                             className="w-full h-9 rounded-xl text-xs bg-black/30 border-white/10"
                           />
@@ -1801,7 +2377,11 @@ const ImportantTabsTab = ({ _showImportantTabs, _onShowImportantTabsChange, impo
                         <div className="flex-1 min-w-0">
                           <InputField
                             value={link.url}
-                            onChange={(e) => updateLink(tab.id, link.id, { url: e.target.value })}
+                            onChange={(e) =>
+                              updateLink(tab.id, link.id, {
+                                url: e.target.value,
+                              })
+                            }
                             placeholder="https://..."
                             className="w-full h-9 rounded-xl text-xs bg-black/30 border-white/10"
                           />
@@ -1845,7 +2425,70 @@ const ImportantTabsTab = ({ _showImportantTabs, _onShowImportantTabsChange, impo
 };
 
 /* ─── TAB 5: Time Boxing ─── */
-const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "default" }) => {
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const TimeBoxingRoutines = ({ timeboxing, onRoutinesChange, onAskEveryDayChange, onSelectRoutine, uiTheme }) => {
+  const [editingId, setEditingId] = useState(null);
+  const routines = timeboxing?.routines || [];
+  const routine = routines.find((item) => item.id === editingId) || routines[0];
+  const updateRoutine = (patch) => onRoutinesChange(routines.map((item) =>
+    item.id === routine.id ? { ...item, ...patch } : item));
+  const addRoutine = () => {
+    const id = makeId();
+    onRoutinesChange([...routines, { id, name: "New routine", days: [], groups: [] }]);
+    setEditingId(id);
+  };
+  const toggleDay = (day) => {
+    const alreadyAssigned = routine.days.includes(day);
+    onRoutinesChange(routines.map((item) => ({ ...item,
+      days: item.id === routine.id
+        ? (alreadyAssigned ? item.days.filter((value) => value !== day) : [...item.days, day])
+        : item.days.filter((value) => value !== day),
+    })));
+  };
+
+  if (!timeboxing) return null;
+  return (
+    <div className="flex flex-col gap-4">
+      <CardContainer title="Routines" description="Routine days start at 00:00 UTC. Task times use your local time.">
+        <div className="flex items-center justify-between gap-4 py-3 border-b border-white/10">
+          <div><p className="text-sm text-white">Ask every day</p><p className="text-xs text-white/60 mt-1">Choose a saved routine or make a custom plan each day.</p></div>
+          <Toggle checked={timeboxing.askEveryDay} onChange={onAskEveryDayChange} />
+        </div>
+        <label className="block mt-4 text-xs text-white/70">
+          Today’s routine
+          <select value={timeboxing.selectedId || ""} onChange={(event) => onSelectRoutine(event.target.value)}
+            className="mt-1.5 w-full h-10 rounded-2xl bg-black/40 border border-white/15 px-3.5 text-xs text-white outline-none cursor-pointer">
+            {!timeboxing.selectedId && <option value="" disabled>Choose a routine</option>}
+            {routines.map((item) => <option key={item.id} value={item.id}>{item.name || "Untitled routine"}</option>)}
+            <option value={CUSTOM_ROUTINE}>Custom plan for today</option>
+          </select>
+          <span className="block mt-1.5 text-[11px] text-white/50">Changing this only affects today; your weekly assignments stay the same.</span>
+        </label>
+        <div className="flex flex-wrap gap-2 mt-4">
+          {routines.map((item) => <button key={item.id} type="button" onClick={() => setEditingId(item.id)} aria-pressed={routine?.id === item.id}
+            className={`settings-choice px-3 py-2 rounded-xl text-xs font-gilroy-bold cursor-pointer border transition-all ${routine?.id === item.id ? "bg-[color:var(--theme)]/50 text-white border-white/40" : "bg-white/10 text-white border-white/20 hover:bg-white/20"}`}>{item.name || "Untitled routine"}</button>)}
+          <button type="button" onClick={addRoutine} className="settings-choice px-3 py-2 rounded-xl text-xs font-gilroy-bold text-white bg-white/10 border border-white/20 hover:bg-white/20 transition-all cursor-pointer">+ New routine</button>
+        </div>
+        {routine && <div className="mt-4 flex flex-col gap-3">
+          <label className="text-xs text-white/70">Routine name<InputField value={routine.name} onChange={(event) => updateRoutine({ name: event.target.value })} placeholder="Routine name" className="mt-1.5" /></label>
+          <div><p className="text-xs text-white/70 mb-2">Assigned days</p><div className="flex flex-wrap gap-2">
+            {WEEKDAYS.map((day, index) => <button key={day} type="button" onClick={() => toggleDay(index)} aria-pressed={routine.days.includes(index)}
+              className={`settings-choice px-3 py-1.5 rounded-full text-xs font-gilroy-bold cursor-pointer border transition-all ${routine.days.includes(index) ? "bg-[color:var(--theme)]/50 text-white border-white/40" : "bg-white/10 text-white border-white/20 hover:bg-white/20"}`}>{day}</button>)}
+          </div><p className="text-[11px] text-white/50 mt-2">Assigning a day here moves it from any other routine.</p></div>
+          <button type="button" onClick={() => { if (window.confirm(`Delete “${routine.name || "Untitled routine"}” and its task blocks?`)) { onRoutinesChange(routines.filter((item) => item.id !== routine.id)); setEditingId(null); } }} className="self-start text-xs text-red-300 hover:text-red-200 cursor-pointer">Delete routine</button>
+        </div>}
+      </CardContainer>
+      {routine && <TimeBoxingTab key={routine.id} timeBoxingGroups={routine.groups} onTimeBoxingGroupsChange={(groups) => updateRoutine({ groups })} uiTheme={uiTheme} />}
+    </div>
+  );
+};
+
+const TimeBoxingTab = ({
+  timeBoxingGroups,
+  onTimeBoxingGroupsChange,
+  uiTheme = "default",
+}) => {
   const [iconPickerGroupId, setIconPickerGroupId] = useState(null);
   const [timePickerGroupId, setTimePickerGroupId] = useState(null);
   const [expandedGroupId, setExpandedGroupId] = useState(null);
@@ -1869,18 +2512,29 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
     }
   }, [timeBoxingGroups]);
 
-  const anyPickerOpen = timePickerGroupId !== null || iconPickerGroupId !== null;
+  const anyPickerOpen =
+    timePickerGroupId !== null || iconPickerGroupId !== null;
 
   const addGroup = () => {
-    const g = { id: makeId(), title: "New Routine", iconClass: "ri-briefcase-line", time: "9:00 am", streak: 0, subtasks: [] };
+    const g = {
+      id: makeId(),
+      title: "New Routine",
+      iconClass: "ri-briefcase-line",
+      time: "9:00 am",
+      streak: 0,
+      subtasks: [],
+    };
     onTimeBoxingGroupsChange([...timeBoxingGroups, g]);
     setExpandedGroupId(g.id);
   };
 
-  const removeGroup = (id) => onTimeBoxingGroupsChange(timeBoxingGroups.filter((g) => g.id !== id));
+  const removeGroup = (id) =>
+    onTimeBoxingGroupsChange(timeBoxingGroups.filter((g) => g.id !== id));
 
   const updateGroup = (id, patch) =>
-    onTimeBoxingGroupsChange(timeBoxingGroups.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+    onTimeBoxingGroupsChange(
+      timeBoxingGroups.map((g) => (g.id === id ? { ...g, ...patch } : g)),
+    );
 
   const handleDragStart = (e, index) => {
     setDraggedIdx(index);
@@ -1916,7 +2570,9 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
     if (!g) return;
     const id = makeId();
     lastAddedSubtaskRef.current = { groupId, id };
-    updateGroup(groupId, { subtasks: [...g.subtasks, { id, text: "", done: false }] });
+    updateGroup(groupId, {
+      subtasks: [...g.subtasks, { id, text: "", done: false }],
+    });
   };
 
   const removeSubtask = (groupId, stId) => {
@@ -1928,7 +2584,9 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
   const updateSubtask = (groupId, stId, text) => {
     const g = timeBoxingGroups.find((g) => g.id === groupId);
     if (!g) return;
-    updateGroup(groupId, { subtasks: g.subtasks.map((s) => (s.id === stId ? { ...s, text } : s)) });
+    updateGroup(groupId, {
+      subtasks: g.subtasks.map((s) => (s.id === stId ? { ...s, text } : s)),
+    });
   };
 
   const handleSubtaskDragStart = (e, groupId, idx) => {
@@ -1975,8 +2633,8 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
   return (
     <CardContainer
       overflowVisible={anyPickerOpen}
-      title="Time Boxing Routine Editor"
-      description="Structure your daily routines into scheduled task blocks with subtask checklists. Drag task cards up or down to reorder them."
+      title="Task blocks"
+      description="Drag blocks to change their order."
     >
       <div className="flex flex-col gap-4 pt-3 border-t border-white/10">
         <div className="flex flex-col gap-4">
@@ -1993,13 +2651,16 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
                 onDrop={(e) => handleDrop(e, idx)}
                 onDragEnd={handleDragEnd}
                 className={`bg-black/25 border rounded-2xl transition-all shadow-sm relative ${
-                  (timePickerGroupId === group.id || iconPickerGroupId === group.id) ? "z-30 overflow-visible" : "z-10 overflow-hidden"
+                  timePickerGroupId === group.id ||
+                  iconPickerGroupId === group.id
+                    ? "z-30 overflow-visible"
+                    : "z-10 overflow-hidden"
                 } ${
                   isDragging
                     ? "opacity-40 border-dashed border-white/40 scale-[0.99]"
                     : isDragOver
-                    ? "border-[color:var(--theme)] shadow-lg ring-2 ring-[color:var(--theme)]/30 scale-[1.01]"
-                    : "border-white/10 hover:border-white/20"
+                      ? "border-[color:var(--theme)] shadow-lg ring-2 ring-[color:var(--theme)]/30 scale-[1.01]"
+                      : "border-white/10 hover:border-white/20"
                 }`}
               >
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 p-3">
@@ -2020,17 +2681,23 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setIconPickerGroupId(iconPickerGroupId === group.id ? null : group.id);
+                        setIconPickerGroupId(
+                          iconPickerGroupId === group.id ? null : group.id,
+                        );
                       }}
                       className="h-10 w-10 rounded-2xl bg-black/40 hover:bg-black/60 border border-white/15 hover:border-white/30 flex items-center justify-center text-white text-xl transition-all shrink-0 cursor-pointer active:scale-95 shadow-sm"
                       title="Change Icon"
                     >
-                      <i className={`${group.iconClass || "ri-briefcase-line"} relative z-10`} />
+                      <i
+                        className={`${group.iconClass || "ri-briefcase-line"} relative z-10`}
+                      />
                     </button>
 
                     {iconPickerGroupId === group.id && (
                       <IconDropdownPopover
-                        triggerRef={{ current: iconButtonRefs.current[group.id] }}
+                        triggerRef={{
+                          current: iconButtonRefs.current[group.id],
+                        }}
                         current={group.iconClass || "ri-briefcase-line"}
                         onSelect={(newIcon) => {
                           updateGroup(group.id, { iconClass: newIcon });
@@ -2046,7 +2713,9 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
                   <div className="flex-1 min-w-0">
                     <InputField
                       value={group.title}
-                      onChange={(e) => updateGroup(group.id, { title: e.target.value })}
+                      onChange={(e) =>
+                        updateGroup(group.id, { title: e.target.value })
+                      }
                       placeholder="Task Group Name"
                       className="w-full font-gilroy-bold"
                     />
@@ -2059,19 +2728,25 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setTimePickerGroupId(timePickerGroupId === group.id ? null : group.id);
+                        setTimePickerGroupId(
+                          timePickerGroupId === group.id ? null : group.id,
+                        );
                       }}
                       className="h-10 px-3.5 rounded-2xl bg-black/40 hover:bg-black/60 border border-white/15 hover:border-white/30 text-xs text-white font-gilroy-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm min-w-[105px]"
                       title="Select Routine Scheduled Time"
                     >
                       <i className="ri-time-line text-sm text-[color:var(--theme)]" />
                       <span>{group.time || "9:00 am"}</span>
-                      <i className={`ri-arrow-${timePickerGroupId === group.id ? "up" : "down"}-s-line text-xs opacity-60 transition-transform`} />
+                      <i
+                        className={`ri-arrow-${timePickerGroupId === group.id ? "up" : "down"}-s-line text-xs opacity-60 transition-transform`}
+                      />
                     </button>
 
                     {timePickerGroupId === group.id && (
                       <TimeDropdownPopover
-                        triggerRef={{ current: timeButtonRefs.current[group.id] }}
+                        triggerRef={{
+                          current: timeButtonRefs.current[group.id],
+                        }}
                         current={group.time || "9:00 am"}
                         onSelect={(newTime) => {
                           updateGroup(group.id, { time: newTime });
@@ -2087,11 +2762,19 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
                   <div className="flex items-center gap-2 shrink-0 ml-auto">
                     <button
                       type="button"
-                      onClick={() => setExpandedGroupId(expandedGroupId === group.id ? null : group.id)}
+                      onClick={() =>
+                        setExpandedGroupId(
+                          expandedGroupId === group.id ? null : group.id,
+                        )
+                      }
                       className="h-10 px-3.5 rounded-2xl bg-[color:var(--theme)]/25 hover:bg-[color:var(--theme)]/45 border border-white/20 text-xs text-white/80 hover:text-white cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shrink-0"
                     >
-                      <span className="text-xs font-gilroy-medium">{group.subtasks?.length || 0} subtasks</span>
-                      <i className={`ri-arrow-${expandedGroupId === group.id ? "up" : "down"}-s-line text-sm relative z-10`} />
+                      <span className="text-xs font-gilroy-medium">
+                        {group.subtasks?.length || 0} subtasks
+                      </span>
+                      <i
+                        className={`ri-arrow-${expandedGroupId === group.id ? "up" : "down"}-s-line text-sm relative z-10`}
+                      />
                     </button>
                     <button
                       type="button"
@@ -2125,9 +2808,7 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
                           onDragOver={(e) =>
                             handleSubtaskDragOver(e, group.id, stIdx)
                           }
-                          onDrop={(e) =>
-                            handleSubtaskDrop(e, group.id, stIdx)
-                          }
+                          onDrop={(e) => handleSubtaskDrop(e, group.id, stIdx)}
                           onDragEnd={handleSubtaskDragEnd}
                           className={`flex items-center gap-2.5 rounded-xl transition-all ${
                             stDragging
@@ -2193,7 +2874,7 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
           className="w-full py-3 rounded-2xl bg-[color:var(--theme)]/30 hover:bg-[color:var(--theme)]/50 border border-white/20 text-xs text-white font-gilroy-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 shadow-md mt-1"
         >
           <i className="ri-add-line text-base relative z-10" />
-          <span className="relative z-10">Add Time Boxing Group</span>
+          <span className="relative z-10">Add task block</span>
         </button>
       </div>
     </CardContainer>
@@ -2202,16 +2883,30 @@ const TimeBoxingTab = ({ timeBoxingGroups, onTimeBoxingGroupsChange, uiTheme = "
 
 /* ─── TAB 6: Widget Visibility ─── */
 const WidgetsTab = ({
+  section = "widgets",
   uiTheme,
-  showTimer, onShowTimerChange,
-  showWaterReminder, onShowWaterReminderChange,
-  showSongPlayer, onShowSongPlayerChange,
-  showTodo, onShowTodoChange,
-  showImportantTabs, onShowImportantTabsChange,
-  showTimeBoxing, onShowTimeBoxingChange,
-  showStreakGrid, onShowStreakGridChange,
-  streakDataSource, onStreakDataSourceChange,
-  githubUsername, onGithubUsernameChange,
+  showTimer,
+  onShowTimerChange,
+  showWaterReminder,
+  onShowWaterReminderChange,
+  showSongPlayer,
+  onShowSongPlayerChange,
+  showTodo,
+  onShowTodoChange,
+  showImportantTabs,
+  onShowImportantTabsChange,
+  showTimeBoxing,
+  onShowTimeBoxingChange,
+  showStreakGrid,
+  onShowStreakGridChange,
+  streakDataSource,
+  onStreakDataSourceChange,
+  githubUsername,
+  onGithubUsernameChange,
+  codeforcesUsername,
+  onCodeforcesUsernameChange,
+  leetcodeUsername,
+  onLeetcodeUsernameChange,
 }) => {
   const isManga = uiTheme === "manga";
   const accentStyle = {
@@ -2219,50 +2914,103 @@ const WidgetsTab = ({
     borderColor: isManga ? "#000000" : "var(--theme)",
   };
   const idleStyle = {
-    borderColor: isManga ? "#000000" : "color-mix(in srgb, var(--theme-1, var(--theme)) 35%, transparent)",
+    borderColor: isManga
+      ? "#000000"
+      : "color-mix(in srgb, var(--theme-1, var(--theme)) 35%, transparent)",
   };
 
   return (
     <>
-      <CardContainer
-        title="Dashboard Widgets Visibility"
-        description="Control which widgets and tools are displayed on your main dashboard grid."
+      {section === "widgets" && <CardContainer
+        title="Visible widgets"
+        description="Choose what appears on your dashboard."
       >
         <div className="flex flex-col gap-1 pt-3 border-t border-white/10">
           {[
-            { title: "Focus Timer Widget", desc: "Pomodoro & rest countdown timer card", state: showTimer, set: onShowTimerChange, icon: "ri-timer-line" },
-            { title: "Water Reminder Widget", desc: "Liquid animation hydration goal & counter", state: showWaterReminder, set: onShowWaterReminderChange, icon: "ri-drop-line" },
-            { title: "24/7 Song Player Widget", desc: "24/7 Lofi live stream music player", state: showSongPlayer, set: onShowSongPlayerChange, icon: "ri-music-2-line" },
-            { title: "Notepad / To Do Checklist", desc: "Quick notes and task checklist card", state: showTodo, set: onShowTodoChange, icon: "ri-file-text-line" },
-            { title: "Important Tabs Widget", desc: "Categorized quick bookmarks and links", state: showImportantTabs, set: onShowImportantTabsChange, icon: "ri-bookmark-3-line" },
-            { title: "Time Boxing Routines", desc: "Daily time blocking and scheduled task cards", state: showTimeBoxing, set: onShowTimeBoxingChange, icon: "ri-time-line" },
-            { title: "Streak Activity Grid", desc: "GitHub-style daily contribution grid", state: showStreakGrid, set: onShowStreakGridChange, icon: "ri-calendar-check-line" },
+            {
+              title: "Focus timer",
+              state: showTimer,
+              set: onShowTimerChange,
+              icon: "ri-timer-line",
+            },
+            {
+              title: "Water reminder",
+              state: showWaterReminder,
+              set: onShowWaterReminderChange,
+              icon: "ri-drop-line",
+            },
+            {
+              title: "Music player",
+              state: showSongPlayer,
+              set: onShowSongPlayerChange,
+              icon: "ri-music-2-line",
+            },
+            {
+              title: "To-do list",
+              state: showTodo,
+              set: onShowTodoChange,
+              icon: "ri-file-text-line",
+            },
+            {
+              title: "Tab groups",
+              state: showImportantTabs,
+              set: onShowImportantTabsChange,
+              icon: "ri-bookmark-3-line",
+            },
+            {
+              title: "Time boxing",
+              state: showTimeBoxing,
+              set: onShowTimeBoxingChange,
+              icon: "ri-time-line",
+            },
+            {
+              title: "Activity grid",
+              state: showStreakGrid,
+              set: onShowStreakGridChange,
+              icon: "ri-calendar-check-line",
+            },
           ].map((w, idx) => (
-            <div key={idx} className="flex items-center justify-between py-3 border-b border-white/5 last:border-0 hover:bg-white/[0.02] px-2 rounded-xl transition-colors">
+            <div
+              key={idx}
+              className="flex items-center justify-between py-3 border-b border-white/5 last:border-0 hover:bg-white/[0.02] px-2 rounded-xl transition-colors"
+            >
               <div className="flex items-center gap-3">
                 <div className="h-9 w-9 rounded-xl bg-[color:var(--theme)]/20 border border-white/15 flex items-center justify-center text-white text-base shrink-0 shadow-inner">
                   <i className={`${w.icon} relative z-10`} />
                 </div>
                 <div>
-                  <h4 className="text-white text-xs font-gilroy-bold">{w.title}</h4>
-                  <p className="text-white/50 text-[11px] font-gilroy-medium">{w.desc}</p>
+                  <h4 className="text-white text-xs font-gilroy-bold">
+                    {w.title}
+                  </h4>
                 </div>
               </div>
               <Toggle checked={w.state} onChange={w.set} />
             </div>
           ))}
         </div>
-      </CardContainer>
+      </CardContainer>}
 
-      <CardContainer
-        title="Streak Grid Data Source"
-        description="Choose which contribution graph the Streak Activity Grid widget displays."
+      {section === "activity" && <CardContainer
+        title="Activity source"
+        description="Choose what your activity grid tracks."
       >
         <div className="flex flex-col gap-3 pt-3 border-t border-white/10">
-          <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-black/40 border border-white/10">
+          <div className="grid grid-cols-2 gap-1.5 p-1.5 rounded-2xl bg-black/40 border border-white/10">
             {[
-              { id: "local", label: "Focus Activity", desc: "Tasks, timers & water goals logged on this device", icon: "ri-fire-line" },
-              { id: "github", label: "GitHub Contributions", desc: "Public commits, PRs & issues from your GitHub profile", icon: "ri-github-line" },
+              {
+                id: "local",
+                label: "Focus Activity",
+                desc: "Tasks, timers & water goals logged on this device",
+                icon: "ri-fire-line",
+              },
+              {
+                id: "github",
+                label: "GitHub Contributions",
+                desc: "Public commits, PRs & issues from your GitHub profile",
+                icon: "ri-github-line",
+              },
+              { id: "codeforces", label: "Codeforces", desc: "Public submission activity", icon: "ri-code-s-slash-line" },
+              { id: "leetcode", label: "LeetCode", desc: "Public submission calendar", icon: "ri-code-box-line" },
             ].map((option) => {
               const active = streakDataSource === option.id;
               return (
@@ -2272,14 +3020,18 @@ const WidgetsTab = ({
                   onClick={() => onStreakDataSourceChange(option.id)}
                   style={active ? accentStyle : undefined}
                   className={`flex-1 flex flex-col items-start gap-0.5 px-3.5 py-2.5 rounded-xl transition-all cursor-pointer text-left ${
-                    active ? "text-white" : "text-white/60 hover:text-white hover:bg-white/5"
+                    active
+                      ? "text-white"
+                      : "text-white/60 hover:text-white hover:bg-white/5"
                   }`}
                 >
                   <span className="flex items-center gap-1.5 text-[11px] font-gilroy-bold">
                     <i className={`${option.icon} text-sm`}></i>
                     <span className="relative z-10">{option.label}</span>
                   </span>
-                  <span className={`text-[10px] font-gilroy-medium ${active ? "text-white/70" : "text-white/40"}`}>
+                  <span
+                    className={`text-[10px] font-gilroy-medium ${active ? "text-white/70" : "text-white/40"}`}
+                  >
                     {option.desc}
                   </span>
                 </button>
@@ -2287,33 +3039,38 @@ const WidgetsTab = ({
             })}
           </div>
 
-          {streakDataSource === "github" && (
+          {["github", "codeforces", "leetcode"].includes(streakDataSource) && (
             <div className="flex flex-col gap-1.5">
               <label
-                style={{ color: isManga ? "#000000" : "var(--theme-2, var(--theme-1, var(--theme)))" }}
+                style={{
+                  color: isManga
+                    ? "#000000"
+                    : "var(--theme-2, var(--theme-1, var(--theme)))",
+                }}
                 className="text-[9px] uppercase tracking-wider block font-gilroy-bold opacity-90"
               >
-                GitHub Username
+                {{ github: "GitHub", codeforces: "Codeforces", leetcode: "LeetCode" }[streakDataSource]} Username
               </label>
               <div className="flex items-center gap-1.5">
-                <span className="text-white/50 text-[11px] font-gilroy-bold">@</span>
+                <span className="text-white/50 text-[11px] font-gilroy-bold">
+                  @
+                </span>
                 <input
                   type="text"
-                  value={githubUsername}
-                  onChange={(e) => onGithubUsernameChange(e.target.value)}
-                  placeholder="octocat"
+                  value={{ github: githubUsername, codeforces: codeforcesUsername, leetcode: leetcodeUsername }[streakDataSource] || ""}
+                  onChange={(e) => ({ github: onGithubUsernameChange, codeforces: onCodeforcesUsernameChange, leetcode: onLeetcodeUsernameChange }[streakDataSource])(e.target.value)}
+                  placeholder={streakDataSource === "github" ? "octocat" : "Username or profile URL"}
                   style={idleStyle}
                   className="flex-1 h-8 px-2.5 rounded-xl bg-black/60 border text-[11px] text-white placeholder:text-white/40 focus:outline-none transition-all font-gilroy-medium"
                 />
               </div>
               <p className="text-white/40 text-[10px] font-gilroy-medium leading-relaxed">
-                Paste your GitHub username or profile link (e.g. github.com/octocat). Shows
-                contributions from your public activity and reflects roughly the last 90 days.
+                Activity is cached for one hour to reduce requests. {streakDataSource === "codeforces" ? "Counts public submissions, including unsuccessful attempts." : streakDataSource === "leetcode" ? "LeetCode may block its unofficial public calendar endpoint." : "GitHub uses a public contribution service with fallbacks."}
               </p>
             </div>
           )}
         </div>
-      </CardContainer>
+      </CardContainer>}
     </>
   );
 };
@@ -2378,7 +3135,9 @@ const BackupTab = ({ uiTheme }) => {
       }
 
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        throw new Error("Invalid backup payload structure. Expected a JSON object.");
+        throw new Error(
+          "Invalid backup payload structure. Expected a JSON object.",
+        );
       }
 
       await importAllStorageData(parsed);
@@ -2427,6 +3186,7 @@ const BackupTab = ({ uiTheme }) => {
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="settings-cloud-sync"><CloudSync /></div>
       {statusMsg && (
         <div
           className={`p-4 rounded-2xl border text-xs font-gilroy-bold flex items-center gap-3 animate-fade-in ${
@@ -2457,8 +3217,7 @@ const BackupTab = ({ uiTheme }) => {
 
       {/* Export Section */}
       <CardContainer
-        title="Export Settings & Data"
-        description="Download a complete backup of everything: basic & advanced settings, preferences, custom wallpapers, taskbar shortcuts, widget placements, time-boxing routines, streak activity, and all to-do lists (including sub-tasks)."
+        title="Export"
       >
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
           <div className="flex items-center gap-3">
@@ -2466,9 +3225,11 @@ const BackupTab = ({ uiTheme }) => {
               <i className="ri-download-cloud-2-line" />
             </div>
             <div>
-              <h4 className="text-white text-xs font-gilroy-bold">Backup JSON File</h4>
+              <h4 className="text-white text-xs font-gilroy-bold">
+                Download a backup
+              </h4>
               <p className="text-white/50 text-[11px] font-gilroy-medium">
-                Generates a portable backup file containing 100% of your dashboard data.
+                Save your dashboard settings and data as JSON.
               </p>
             </div>
           </div>
@@ -2479,15 +3240,16 @@ const BackupTab = ({ uiTheme }) => {
             className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-gilroy-bold text-white bg-[color:var(--theme)]/30 hover:bg-[color:var(--theme)]/50 border border-white/20 transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shadow-md disabled:opacity-50"
           >
             <i className="ri-download-2-line text-sm" />
-            <span>{isExporting ? "Exporting..." : "Export Backup (.json)"}</span>
+            <span>
+              {isExporting ? "Exporting..." : "Export"}
+            </span>
           </button>
         </div>
       </CardContainer>
 
       {/* Restore / Import Section */}
       <CardContainer
-        title="Restore / Load Settings & Data"
-        description="Load a previously exported backup file to instantly restore all your settings, custom layouts, widget positions, habits, to-do lists with sub-tasks, and preferences."
+        title="Restore"
       >
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
           <div className="flex items-center gap-3">
@@ -2495,9 +3257,11 @@ const BackupTab = ({ uiTheme }) => {
               <i className="ri-upload-cloud-2-line" />
             </div>
             <div>
-              <h4 className="text-white text-xs font-gilroy-bold">Upload Backup File</h4>
+              <h4 className="text-white text-xs font-gilroy-bold">
+                Restore from a backup
+              </h4>
               <p className="text-white/50 text-[11px] font-gilroy-medium">
-                Select a valid `.json` dashboard backup file from your device.
+                Choose a Project OS JSON backup.
               </p>
             </div>
           </div>
@@ -2516,7 +3280,9 @@ const BackupTab = ({ uiTheme }) => {
               className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-gilroy-bold text-white bg-white/10 hover:bg-white/20 border border-white/20 transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shadow-md disabled:opacity-50"
             >
               <i className="ri-upload-2-line text-sm" />
-              <span>{isImporting ? "Restoring..." : "Restore Backup (.json)"}</span>
+              <span>
+                {isImporting ? "Restoring..." : "Restore"}
+              </span>
             </button>
           </div>
         </div>
@@ -2524,8 +3290,7 @@ const BackupTab = ({ uiTheme }) => {
 
       {/* Factory Reset Section */}
       <CardContainer
-        title="Reset All Dashboard Data"
-        description="Permanently clear all saved storage and reset the dashboard back to default initial state."
+        title="Reset"
       >
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
           <div className="flex items-center gap-3">
@@ -2533,9 +3298,11 @@ const BackupTab = ({ uiTheme }) => {
               <i className="ri-delete-bin-line" />
             </div>
             <div>
-              <h4 className="text-white text-xs font-gilroy-bold">Factory Reset</h4>
+              <h4 className="text-white text-xs font-gilroy-bold">
+                Reset dashboard
+              </h4>
               <p className="text-white/50 text-[11px] font-gilroy-medium">
-                Clears extension & browser storage data.
+                Permanently clears saved data and restores defaults.
               </p>
             </div>
           </div>
@@ -2577,6 +3344,18 @@ const BackupTab = ({ uiTheme }) => {
 /* ─── Main Full-Fledged Settings Screen ─── */
 const SettingsPage = (props) => {
   const [activeTab, setActiveTab] = useState("appearance");
+  const [sections, setSections] = useState({ appearance: "wallpaper", dashboard: "widgets", shortcuts: "taskbar" });
+  const contentRef = useRef(null);
+  const activeCategory = NAV_TABS.find((tab) => tab.id === activeTab);
+  const activeSection = sections[activeTab];
+  const selectCategory = (id) => {
+    if (id === "appearance") setSections((current) => ({ ...current, appearance: "wallpaper" }));
+    setActiveTab(id);
+  };
+
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [activeTab, activeSection]);
 
   // Close on Escape key (only fires when no deeper modal is open, since those use capture phase)
   useEffect(() => {
@@ -2608,7 +3387,9 @@ const SettingsPage = (props) => {
             <div className="h-10 w-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-inner">
               <i className="ri-settings-3-fill text-lg relative z-10" />
             </div>
-            <h1 className="text-white text-lg font-gilroy-bold tracking-tight">Settings</h1>
+            <h1 className="text-white text-lg font-gilroy-bold tracking-tight">
+              Settings
+            </h1>
           </div>
 
           {/* Top-right controls: Close button matching Dashboard close button */}
@@ -2625,7 +3406,7 @@ const SettingsPage = (props) => {
         {/* Main Full-Fledged Screen Split */}
         <div className="w-full flex-1 flex min-h-0 overflow-hidden z-20 relative">
           {/* Left Sidebar Navigation */}
-          <aside className="w-64 sm:w-72 border-r border-white/15 p-6 flex flex-col justify-between shrink-0 select-none bg-black/10">
+          <aside className="hidden md:flex w-56 lg:w-64 border-r border-white/15 p-4 flex-col justify-between shrink-0 select-none bg-black/10 overflow-y-auto">
             <div className="flex flex-col gap-6">
               <nav className="flex flex-col gap-2">
                 {NAV_TABS.map((tab) => {
@@ -2634,7 +3415,8 @@ const SettingsPage = (props) => {
                     <button
                       key={tab.id}
                       type="button"
-                      onClick={() => setActiveTab(tab.id)}
+                      onClick={() => selectCategory(tab.id)}
+                      aria-current={isActive ? "page" : undefined}
                       className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs transition-all duration-300 ease-out cursor-pointer relative overflow-hidden select-none active:scale-[0.98] ${
                         isActive
                           ? "text-white font-gilroy-bold"
@@ -2644,8 +3426,12 @@ const SettingsPage = (props) => {
                       {isActive && (
                         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white rounded-r-full shadow-md animate-fade-in" />
                       )}
-                      <i className={`${tab.icon} text-base transition-colors duration-300 ${isActive ? "text-white" : "text-white/50"}`} />
-                      <span className="relative z-10 transition-colors duration-300">{tab.label}</span>
+                      <i
+                        className={`${tab.icon} text-base transition-colors duration-300 ${isActive ? "text-white" : "text-white/50"}`}
+                      />
+                      <span className="relative z-10 transition-colors duration-300">
+                        {tab.label}
+                      </span>
                     </button>
                   );
                 })}
@@ -2657,7 +3443,12 @@ const SettingsPage = (props) => {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => window.open("https://github.com/rahul3rj/Lively-New-Tab-Dashboard", "_blank")}
+                  onClick={() =>
+                    window.open(
+                      "https://github.com/rahul3rj/Lively-New-Tab-Dashboard",
+                      "_blank",
+                    )
+                  }
                   className="flex-1 py-2.5 rounded-xl text-[11px] text-white font-gilroy-medium bg-[color:var(--theme)]/20 hover:bg-[color:var(--theme)]/40 border border-white/15 transition-all duration-300 ease-out active:scale-[0.97] cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <i className="ri-github-fill relative z-10" />
@@ -2665,7 +3456,9 @@ const SettingsPage = (props) => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => window.open("https://forms.gle/teCwi4Nmm39Lq1i37", "_blank")}
+                  onClick={() =>
+                    window.open("https://forms.gle/teCwi4Nmm39Lq1i37", "_blank")
+                  }
                   className="flex-1 py-2.5 rounded-xl text-[11px] text-white font-gilroy-medium bg-[color:var(--theme)]/20 hover:bg-[color:var(--theme)]/40 border border-white/15 transition-all duration-300 ease-out active:scale-[0.97] cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <i className="ri-chrome-line relative z-10" />
@@ -2680,127 +3473,161 @@ const SettingsPage = (props) => {
               >
                 Developed by Rahul Jha 👌🏼
               </a>
-          </div>
-        </aside>
-
-        {/* Right Main Content Area */}
-        <main className="flex-1 min-w-0 h-full overflow-y-auto scrollbar-hide p-8 sm:p-10">
-          <div className="max-w-4xl mx-auto flex flex-col gap-6">
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
-              <h2 className="text-white text-xl font-gilroy-bold">
-                {NAV_TABS.find((t) => t.id === activeTab)?.label}
-              </h2>
             </div>
+          </aside>
 
-            {activeTab === "appearance" && (
-              <AppearanceTab
-                wallpaper={props.wallpaper}
-                onWallpaperPick={props.onWallpaperPick}
-                onWallpaperReset={props.onWallpaperReset}
-                themeColor={props.themeColor}
-                themeColorsMap={props.themeColorsMap}
-                onThemeChange={props.onThemeChange}
-                themeTextColorIndex={props.themeTextColorIndex}
-                onThemeTextColorChange={props.onThemeTextColorChange}
-                uiTheme={props.uiTheme}
-                onUiThemeChange={props.onUiThemeChange}
-                baseFont={props.baseFont}
-                onBaseFontChange={props.onBaseFontChange}
-                baseFontSize={props.baseFontSize}
-                onBaseFontSizeChange={props.onBaseFontSizeChange}
-              />
-            )}
+          {/* Right Main Content Area */}
+          <main ref={contentRef} className="flex-1 min-w-0 h-full overflow-y-auto scrollbar-hide p-4 sm:p-6 lg:p-8">
+            <div className="max-w-4xl mx-auto flex flex-col gap-4">
+              <label className="md:hidden text-xs text-white/60">
+                <span className="sr-only">Settings section</span>
+                <select value={activeTab} onChange={(event) => selectCategory(event.target.value)} className="w-full h-10 px-3 rounded-xl bg-black/40 border border-white/15 text-white text-sm">
+                  {NAV_TABS.map((tab) => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
+                </select>
+              </label>
+              <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                <h2 className="text-white text-xl font-gilroy-bold">
+                  {activeCategory?.label}
+                </h2>
+              </div>
+              {activeCategory?.sections && <nav aria-label={`${activeCategory.label} settings`} className="flex gap-2 overflow-x-auto pb-1">
+                {activeCategory.sections.map((section) => <button key={section.id} type="button" aria-pressed={activeSection === section.id}
+                  onClick={() => setSections((current) => ({ ...current, [activeTab]: section.id }))}
+                  className={`settings-choice px-3.5 py-2 rounded-xl text-xs font-gilroy-bold whitespace-nowrap transition-all cursor-pointer border shadow-md active:scale-95 ${activeSection === section.id ? "bg-[color:var(--theme)]/50 text-white border-white/40" : "bg-white/10 text-white border-white/20 hover:bg-white/20"}`}>
+                  {section.label}
+                </button>)}
+              </nav>}
 
-            {activeTab === "focus" && (
-              <FocusTab
-                focusNotifEnabled={props.focusNotifEnabled}
-                onFocusNotifChange={props.onFocusNotifChange}
-                focusEndRingtone={props.focusEndRingtone}
-                onFocusEndRingtoneChange={props.onFocusEndRingtoneChange}
-                restEndRingtone={props.restEndRingtone}
-                onRestEndRingtoneChange={props.onRestEndRingtoneChange}
-                waterGoalMl={props.waterGoalMl}
-                onWaterGoalChange={props.onWaterGoalChange}
-                waterNotifEnabled={props.waterNotifEnabled}
-                onWaterNotifChange={props.onWaterNotifChange}
-                waterRingtone={props.waterRingtone}
-                onWaterRingtoneChange={props.onWaterRingtoneChange}
-              />
-            )}
+              {activeTab === "appearance" && (
+                <AppearanceTab
+                  section={activeSection}
+                  wallpaper={props.wallpaper}
+                  onWallpaperPick={props.onWallpaperPick}
+                  onWallpaperReset={props.onWallpaperReset}
+                  themeColor={props.themeColor}
+                  themeColorsMap={props.themeColorsMap}
+                  onThemeChange={props.onThemeChange}
+                  themeTextColorIndex={props.themeTextColorIndex}
+                  onThemeTextColorChange={props.onThemeTextColorChange}
+                  uiTheme={props.uiTheme}
+                  onUiThemeChange={props.onUiThemeChange}
+                  baseFont={props.baseFont}
+                  onBaseFontChange={props.onBaseFontChange}
+                  baseFontSize={props.baseFontSize}
+                  onBaseFontSizeChange={props.onBaseFontSizeChange}
+                />
+              )}
 
-            {activeTab === "songPlayer" && (
-              <SongPlayerTab
-                songPlaylistUrl={props.songPlaylistUrl}
-                onSongPlaylistUrlChange={props.onSongPlaylistUrlChange}
-                songAutoPlay={props.songAutoPlay}
-                onSongAutoPlayChange={props.onSongAutoPlayChange}
-                songCustomVideo={props.songCustomVideo}
-                onSongCustomVideoChange={props.onSongCustomVideoChange}
-                lofiStations={props.lofiStations}
-                onLofiStationsChange={props.onLofiStationsChange}
-              />
-            )}
+              {activeTab === "dashboard" && activeSection === "focus" && (
+                <FocusTab
+                  focusNotifEnabled={props.focusNotifEnabled}
+                  onFocusNotifChange={props.onFocusNotifChange}
+                  focusEndRingtone={props.focusEndRingtone}
+                  onFocusEndRingtoneChange={props.onFocusEndRingtoneChange}
+                  restEndRingtone={props.restEndRingtone}
+                  onRestEndRingtoneChange={props.onRestEndRingtoneChange}
+                  waterGoalMl={props.waterGoalMl}
+                  onWaterGoalChange={props.onWaterGoalChange}
+                  waterNotifEnabled={props.waterNotifEnabled}
+                  onWaterNotifChange={props.onWaterNotifChange}
+                  waterRingtone={props.waterRingtone}
+                  onWaterRingtoneChange={props.onWaterRingtoneChange}
+                />
+              )}
 
-            {activeTab === "taskbar" && (
-              <TaskbarTab
-                shortcuts={props.shortcuts}
-                onShortcutsReorder={props.onShortcutsChange}
-                onShortcutUpdate={props.onShortcutUpdate}
-                onShortcutRemove={props.onShortcutRemove}
-                onShortcutAdd={props.onShortcutAdd}
-                onShortcutIconPick={props.onShortcutIconPick}
-                uiTheme={props.uiTheme}
-              />
-            )}
+              {activeTab === "island" && (
+                <IslandTab
+                  islandEnabled={props.islandEnabled}
+                  onIslandEnabledChange={props.onIslandEnabledChange}
+                  focusSites={props.focusSites}
+                  onFocusSitesChange={props.onFocusSitesChange}
+                  distractionSites={props.distractionSites}
+                  onDistractionSitesChange={props.onDistractionSitesChange}
+                  onResetIslandPosition={props.onResetIslandPosition}
+                />
+              )}
 
-            {activeTab === "tabs" && (
-              <ImportantTabsTab
-                importantTabsConfig={props.importantTabsConfig}
-                onImportantTabsConfigChange={props.onImportantTabsConfigChange}
-                uiTheme={props.uiTheme}
-              />
-            )}
+              {activeTab === "dashboard" && ["songPlayer", "stations"].includes(activeSection) && (
+                <SongPlayerTab
+                  section={activeSection}
+                  songPlaylistUrl={props.songPlaylistUrl}
+                  onSongPlaylistUrlChange={props.onSongPlaylistUrlChange}
+                  songAutoPlay={props.songAutoPlay}
+                  onSongAutoPlayChange={props.onSongAutoPlayChange}
+                  songCustomVideo={props.songCustomVideo}
+                  onSongCustomVideoChange={props.onSongCustomVideoChange}
+                  lofiStations={props.lofiStations}
+                  onLofiStationsChange={props.onLofiStationsChange}
+                />
+              )}
 
-            {activeTab === "timebox" && (
-              <TimeBoxingTab
-                timeBoxingGroups={props.timeBoxingGroups}
-                onTimeBoxingGroupsChange={props.onTimeBoxingGroupsChange}
-                uiTheme={props.uiTheme}
-              />
-            )}
+              {activeTab === "shortcuts" && activeSection === "taskbar" && (
+                <TaskbarTab
+                  shortcuts={props.shortcuts}
+                  onShortcutsReorder={props.onShortcutsChange}
+                  onShortcutUpdate={props.onShortcutUpdate}
+                  onShortcutRemove={props.onShortcutRemove}
+                  onShortcutAdd={props.onShortcutAdd}
+                  onShortcutIconPick={props.onShortcutIconPick}
+                  uiTheme={props.uiTheme}
+                />
+              )}
 
-            {activeTab === "widgets" && (
-              <WidgetsTab
-                uiTheme={props.uiTheme}
-                showTimer={props.showTimer}
-                onShowTimerChange={props.onShowTimerChange}
-                showWaterReminder={props.showWaterReminder}
-                onShowWaterReminderChange={props.onShowWaterReminderChange}
-                showSongPlayer={props.showSongPlayer}
-                onShowSongPlayerChange={props.onShowSongPlayerChange}
-                showTodo={props.showTodo}
-                onShowTodoChange={props.onShowTodoChange}
-                showImportantTabs={props.showImportantTabs}
-                onShowImportantTabsChange={props.onShowImportantTabsChange}
-                showTimeBoxing={props.showTimeBoxing}
-                onShowTimeBoxingChange={props.onShowTimeBoxingChange}
-                showStreakGrid={props.showStreakGrid}
-                onShowStreakGridChange={props.onShowStreakGridChange}
-                streakDataSource={props.streakDataSource}
-                onStreakDataSourceChange={props.onStreakDataSourceChange}
-                githubUsername={props.githubUsername}
-                onGithubUsernameChange={props.onGithubUsernameChange}
-              />
-            )}
+              {activeTab === "shortcuts" && activeSection === "tabs" && (
+                <ImportantTabsTab
+                  importantTabsConfig={props.importantTabsConfig}
+                  onImportantTabsConfigChange={
+                    props.onImportantTabsConfigChange
+                  }
+                  uiTheme={props.uiTheme}
+                />
+              )}
 
-            {activeTab === "backup" && (
-              <BackupTab uiTheme={props.uiTheme} />
-            )}
-          </div>
-        </main>
+              {activeTab === "timebox" && (
+                <TimeBoxingRoutines
+                  timeboxing={props.timeboxing}
+                  onRoutinesChange={props.onRoutinesChange}
+                  onAskEveryDayChange={props.onAskEveryDayChange}
+                  onSelectRoutine={props.onSelectRoutine}
+                  uiTheme={props.uiTheme}
+                />
+              )}
+
+              {activeTab === "dashboard" && ["widgets", "activity"].includes(activeSection) && (
+                <WidgetsTab
+                  section={activeSection}
+                  uiTheme={props.uiTheme}
+                  showTimer={props.showTimer}
+                  onShowTimerChange={props.onShowTimerChange}
+                  showWaterReminder={props.showWaterReminder}
+                  onShowWaterReminderChange={props.onShowWaterReminderChange}
+                  showSongPlayer={props.showSongPlayer}
+                  onShowSongPlayerChange={props.onShowSongPlayerChange}
+                  showTodo={props.showTodo}
+                  onShowTodoChange={props.onShowTodoChange}
+                  showImportantTabs={props.showImportantTabs}
+                  onShowImportantTabsChange={props.onShowImportantTabsChange}
+                  showTimeBoxing={props.showTimeBoxing}
+                  onShowTimeBoxingChange={props.onShowTimeBoxingChange}
+                  showStreakGrid={props.showStreakGrid}
+                  onShowStreakGridChange={props.onShowStreakGridChange}
+                  streakDataSource={props.streakDataSource}
+                  onStreakDataSourceChange={props.onStreakDataSourceChange}
+                  githubUsername={props.githubUsername}
+                  onGithubUsernameChange={props.onGithubUsernameChange}
+                  codeforcesUsername={props.codeforcesUsername}
+                  onCodeforcesUsernameChange={props.onCodeforcesUsernameChange}
+                  leetcodeUsername={props.leetcodeUsername}
+                  onLeetcodeUsernameChange={props.onLeetcodeUsernameChange}
+                />
+              )}
+
+              {activeTab === "backup" && <BackupTab uiTheme={props.uiTheme} />}
+            </div>
+          </main>
+        </div>
       </div>
     </div>
-  </div>
   );
 };
 

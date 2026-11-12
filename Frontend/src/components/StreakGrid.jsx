@@ -6,7 +6,7 @@ import {
   getActivityMap,
   seedDemoActivityIfEmpty,
 } from "../utils/activityStore";
-import { extractUsername, fetchGitHubContributions } from "../utils/githubActivity";
+import { extractPlatformUsername, getStreakActivity, PLATFORM_LABELS } from "../utils/streakSources.js";
 
 const RANGE_OPTIONS = [
   { id: "current", label: "Current" },
@@ -103,7 +103,7 @@ const computeStats = (data) => {
   return { totalActiveDays, maxStreak, currentStreak };
 };
 
-const StreakGrid = ({ dragHandleProps, dataSource = "local", githubUsername = "" }) => {
+const StreakGrid = ({ dragHandleProps, dataSource = "local", githubUsername = "", codeforcesUsername = "", leetcodeUsername = "" }) => {
   const [activityMap, setActivityMap] = useState(null);
   const [githubData, setGithubData] = useState(null);
   const [githubStatus, setGithubStatus] = useState("idle");
@@ -112,7 +112,9 @@ const StreakGrid = ({ dragHandleProps, dataSource = "local", githubUsername = ""
   const [range, setRange] = useState("current");
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const rangeMenuRef = useRef(null);
-  const isGithub = dataSource === "github";
+  const isRemote = dataSource !== "local";
+  const platformName = PLATFORM_LABELS[dataSource] || "Activity";
+  const username = { github: githubUsername, codeforces: codeforcesUsername, leetcode: leetcodeUsername }[dataSource] || "";
 
   useEffect(() => {
     let cancelled = false;
@@ -160,17 +162,18 @@ const StreakGrid = ({ dragHandleProps, dataSource = "local", githubUsername = ""
 
   useEffect(() => {
     let cancelled = false;
-    if (!isGithub || !extractUsername(githubUsername)) {
+    if (!isRemote || !extractPlatformUsername(dataSource, username)) {
       setGithubStatus("idle");
       setGithubData(null);
       setGithubError("");
       return undefined;
     }
     setGithubStatus("loading");
+    setGithubData(null);
     setGithubError("");
     const timer = setTimeout(async () => {
       try {
-        const result = await fetchGitHubContributions(githubUsername);
+        const result = await getStreakActivity(dataSource, username);
         if (cancelled) return;
         setGithubData(result);
         setGithubStatus("ready");
@@ -185,12 +188,12 @@ const StreakGrid = ({ dragHandleProps, dataSource = "local", githubUsername = ""
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [isGithub, githubUsername, githubRetryKey]);
+  }, [isRemote, dataSource, username, githubRetryKey]);
 
   const data = useMemo(() => {
-    if (isGithub) return githubData ? buildGithubCalendarData(githubData) : [];
+    if (isRemote) return githubData ? buildGithubCalendarData(githubData) : [];
     return activityMap ? buildCalendarData(activityMap, range) : [];
-  }, [isGithub, githubData, activityMap, range]);
+  }, [isRemote, githubData, activityMap, range]);
 
   const { totalActiveDays, maxStreak, currentStreak } = useMemo(
     () => computeStats(data),
@@ -198,7 +201,7 @@ const StreakGrid = ({ dragHandleProps, dataSource = "local", githubUsername = ""
   );
 
   const activeRangeLabel = RANGE_OPTIONS.find((o) => o.id === range)?.label;
-  const titleLabel = isGithub ? "GitHub Contributions" : "Streak Grid View";
+  const titleLabel = isRemote ? `${platformName} Activity` : "Streak Grid View";
 
   return (
     <div
@@ -221,10 +224,10 @@ const StreakGrid = ({ dragHandleProps, dataSource = "local", githubUsername = ""
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1 text-xs">
             <span className="font-gilroy-bold text-white/70">
-              {isGithub ? "Total:" : "Active Days:"}
+              {isRemote && githubData?.yearTotal != null ? "Total:" : "Active Days:"}
             </span>
             <span className="font-gilroy-medium text-white/90">
-              {isGithub
+              {isRemote
                 ? (githubData?.yearTotal ?? totalActiveDays).toLocaleString()
                 : totalActiveDays}
             </span>
@@ -242,7 +245,7 @@ const StreakGrid = ({ dragHandleProps, dataSource = "local", githubUsername = ""
             </span>
           </div>
 
-          {!isGithub && (
+          {!isRemote && (
             <div className="relative" ref={rangeMenuRef}>
               <button
                 type="button"
@@ -286,14 +289,14 @@ const StreakGrid = ({ dragHandleProps, dataSource = "local", githubUsername = ""
 
       {/* Heatmap */}
       <div className="w-full flex-1 min-h-0 flex items-center justify-center overflow-x-auto scrollbar-hide z-10 relative pt-1.5">
-        {isGithub && !extractUsername(githubUsername) ? (
+        {isRemote && !extractPlatformUsername(dataSource, username) ? (
           <div className="flex flex-col items-center justify-center gap-2.5 text-center px-6">
             <i className="ri-github-line text-3xl text-white/40"></i>
             <p className="text-[11px] text-white/50 font-gilroy-medium max-w-[240px]">
-              Add your GitHub username in Settings to view your contribution graph.
+              Add your {platformName} username in Settings to view your activity graph.
             </p>
           </div>
-        ) : isGithub && githubStatus === "error" ? (
+        ) : isRemote && githubStatus === "error" ? (
           <div className="flex flex-col items-center justify-center gap-2.5 text-center px-6">
             <i className="ri-error-warning-line text-3xl text-white/40"></i>
             <p className="text-[11px] text-white/60 font-gilroy-medium max-w-[260px]">
@@ -311,7 +314,7 @@ const StreakGrid = ({ dragHandleProps, dataSource = "local", githubUsername = ""
         ) : data.length > 0 ? (
           <ActivityCalendar
             data={data}
-            loading={isGithub ? githubStatus === "loading" : activityMap === null}
+            loading={isRemote ? githubStatus === "loading" : activityMap === null}
             theme={STREAK_THEME}
             colorScheme="dark"
             blockSize={12}
@@ -337,11 +340,12 @@ const StreakGrid = ({ dragHandleProps, dataSource = "local", githubUsername = ""
           <div className="flex flex-col items-center justify-center gap-2.5 text-center px-6">
             <i className="ri-loader-4-line text-2xl text-white/40 animate-spin"></i>
             <p className="text-[11px] text-white/50 font-gilroy-medium">
-              {isGithub ? "Loading GitHub contributions..." : "Loading activity..."}
+              {isRemote ? `Loading ${platformName} activity...` : "Loading activity..."}
             </p>
           </div>
         )}
       </div>
+      {isRemote && githubData && (githubData.warning || githubData.source === "events") && <p className="text-[10px] text-white/55 text-center z-10" title={githubData.warning || "Approximate public events; history may be incomplete."}>{githubData.warning || "Approximate public events; history may be incomplete."}</p>}
     </div>
   );
 };

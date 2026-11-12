@@ -599,6 +599,9 @@ const DraggableWidget = ({
 
 const DashboardGrid = ({
   showTimer = true,
+  focusNotifEnabled = false,
+  focusEndRingtone = "beep",
+  restEndRingtone = "beep",
   showTodo = true,
   showStreakGrid = true,
   showSongPlayer = true,
@@ -608,6 +611,8 @@ const DashboardGrid = ({
   importantTabsConfig,
   timeBoxingGroups,
   onTimeBoxingGroupsChange,
+  timeboxing,
+  onSelectRoutine,
   songPlaylistUrl,
   songAutoPlay,
   songCustomVideo,
@@ -615,6 +620,8 @@ const DashboardGrid = ({
   waterGoalMl,
   streakDataSource = "local",
   githubUsername = "",
+  codeforcesUsername = "",
+  leetcodeUsername = "",
 }) => {
   const gridRef = useRef(null);
   const [deviceTier, setDeviceTier] = useState(() => getDeviceTier());
@@ -1146,7 +1153,12 @@ const DashboardGrid = ({
       case "timer":
         return (
           <WidgetErrorBoundary name="Focus Timer">
-            <Timer dragHandleProps={dragHandleProps} />
+            <Timer
+  dragHandleProps={dragHandleProps}
+  focusNotifEnabled={focusNotifEnabled}
+  focusEndRingtone={focusEndRingtone}
+  restEndRingtone={restEndRingtone}
+/>
           </WidgetErrorBoundary>
         );
       case "waterReminder":
@@ -1170,7 +1182,13 @@ const DashboardGrid = ({
       case "streakGrid":
         return (
           <WidgetErrorBoundary name="Streak Activity Grid">
-            <StreakGrid dragHandleProps={dragHandleProps} dataSource={streakDataSource} githubUsername={githubUsername} />
+            <StreakGrid
+  dragHandleProps={dragHandleProps}
+  dataSource={streakDataSource}
+  githubUsername={githubUsername}
+  codeforcesUsername={codeforcesUsername}
+  leetcodeUsername={leetcodeUsername}
+/>
           </WidgetErrorBoundary>
         );
       case "songPlayer":
@@ -1183,10 +1201,12 @@ const DashboardGrid = ({
         return (
           <WidgetErrorBoundary name="Time Boxing">
             <TimeBoxing
-              dragHandleProps={dragHandleProps}
-              externalGroups={timeBoxingGroups}
-              onGroupsChange={onTimeBoxingGroupsChange}
-            />
+  dragHandleProps={dragHandleProps}
+  externalGroups={timeBoxingGroups}
+  onGroupsChange={onTimeBoxingGroupsChange}
+  timeboxing={timeboxing}
+  onSelectRoutine={onSelectRoutine}
+/>
           </WidgetErrorBoundary>
         );
       default:

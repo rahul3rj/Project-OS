@@ -251,6 +251,35 @@ export const storageSet = async (key, value) => {
 };
 
 /**
+ * Subscribes to changes of a single key made from any extension context
+ * (e.g. the Dynamic Island content script). Returns an unsubscribe function.
+ */
+export const subscribeStorageKey = (key, callback) => {
+  let onChanged = null;
+  try {
+    onChanged = globalThis.browser?.storage?.onChanged || globalThis.chrome?.storage?.onChanged || null;
+  } catch {
+    onChanged = null;
+  }
+  if (!onChanged || typeof onChanged.addListener !== "function") return () => {};
+
+  const listener = (changes, area) => {
+    if (area && area !== "local") return;
+    if (!changes || !Object.prototype.hasOwnProperty.call(changes, key)) return;
+    callback(parseIfJsonString(changes[key].newValue));
+  };
+
+  try {
+    onChanged.addListener(listener);
+  } catch {
+    return () => {};
+  }
+  return () => {
+    try { onChanged.removeListener(listener); } catch { /* ignore */ }
+  };
+};
+
+/**
  * Export all app data into a JS object.
  * Reads everything from extension storage (if available) and localStorage.
  */
@@ -267,7 +296,7 @@ export const exportAllStorageData = async () => {
           settled = true;
           if (items && typeof items === "object") {
             for (const [k, v] of Object.entries(items)) {
-              result[k] = parseIfJsonString(v);
+              if (!k.startsWith("project_os_auth_") && !k.startsWith("project_os_cloud_")) result[k] = parseIfJsonString(v);
             }
           }
           resolve();
@@ -279,7 +308,7 @@ export const exportAllStorageData = async () => {
               settled = true;
               if (items && typeof items === "object") {
                 for (const [k, v] of Object.entries(items)) {
-                  result[k] = parseIfJsonString(v);
+                  if (!k.startsWith("project_os_auth_") && !k.startsWith("project_os_cloud_")) result[k] = parseIfJsonString(v);
                 }
               }
               resolve();
@@ -303,7 +332,7 @@ export const exportAllStorageData = async () => {
     if (typeof localStorage !== "undefined") {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && result[key] === undefined) {
+        if (key && !key.startsWith("project_os_auth_") && !key.startsWith("project_os_cloud_") && result[key] === undefined) {
           const raw = localStorage.getItem(key);
           if (raw !== null && raw !== undefined) {
             result[key] = parseIfJsonString(raw);
@@ -326,6 +355,9 @@ export const importAllStorageData = async (dataObj) => {
   if (!dataObj || typeof dataObj !== "object" || Array.isArray(dataObj)) {
     throw new Error("Invalid backup payload. Expected a valid JSON object.");
   }
+
+  // Backups must never replace the current cloud session or sync baseline.
+  dataObj = Object.fromEntries(Object.entries(dataObj).filter(([key]) => !key.startsWith("project_os_auth_") && !key.startsWith("project_os_cloud_")));
 
   const api = getStorageApi();
   if (api) {
