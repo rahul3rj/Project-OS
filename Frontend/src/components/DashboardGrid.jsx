@@ -20,6 +20,7 @@ import ImportantTabs from "./ImportantTabs";
 import StreakGrid from "./StreakGrid";
 import SongPlayer from "./SongPlayer";
 import TimeBoxing from "./TimeBoxing";
+import WidgetErrorBoundary from "./WidgetErrorBoundary";
 import { storageGet, storageSet } from "../utils/storage.js";
 
 /* ─── Grid Configuration & Responsive Helpers ─── */
@@ -1150,29 +1151,64 @@ const DashboardGrid = ({
   const renderWidget = (id, dragHandleProps) => {
     switch (id) {
       case "timer":
-        return <Timer dragHandleProps={dragHandleProps} focusNotifEnabled={focusNotifEnabled} focusEndRingtone={focusEndRingtone} restEndRingtone={restEndRingtone} />;
+        return (
+          <WidgetErrorBoundary name="Focus Timer">
+            <Timer
+  dragHandleProps={dragHandleProps}
+  focusNotifEnabled={focusNotifEnabled}
+  focusEndRingtone={focusEndRingtone}
+  restEndRingtone={restEndRingtone}
+/>
+          </WidgetErrorBoundary>
+        );
       case "waterReminder":
-        return <WaterReminder dragHandleProps={dragHandleProps} goalMl={waterGoalMl} />;
+        return (
+          <WidgetErrorBoundary name="Water Reminder">
+            <WaterReminder dragHandleProps={dragHandleProps} goalMl={waterGoalMl} />
+          </WidgetErrorBoundary>
+        );
       case "todo":
-        return <Todo dragHandleProps={dragHandleProps} />;
+        return (
+          <WidgetErrorBoundary name="To-Do List">
+            <Todo dragHandleProps={dragHandleProps} />
+          </WidgetErrorBoundary>
+        );
       case "importantTabs":
-        return <ImportantTabs dragHandleProps={dragHandleProps} tabsConfig={importantTabsConfig} />;
+        return (
+          <WidgetErrorBoundary name="Important Tabs">
+            <ImportantTabs dragHandleProps={dragHandleProps} tabsConfig={importantTabsConfig} />
+          </WidgetErrorBoundary>
+        );
       case "streakGrid":
-        return <StreakGrid dragHandleProps={dragHandleProps} dataSource={streakDataSource} githubUsername={githubUsername} codeforcesUsername={codeforcesUsername} leetcodeUsername={leetcodeUsername} />;
+        return (
+          <WidgetErrorBoundary name="Streak Activity Grid">
+            <StreakGrid
+  dragHandleProps={dragHandleProps}
+  dataSource={streakDataSource}
+  githubUsername={githubUsername}
+  codeforcesUsername={codeforcesUsername}
+  leetcodeUsername={leetcodeUsername}
+/>
+          </WidgetErrorBoundary>
+        );
       case "songPlayer":
-        return <SongPlayer dragHandleProps={dragHandleProps} playlistUrl={songPlaylistUrl} autoPlay={songAutoPlay} customVideo={songCustomVideo} stations={lofiStations} />;
+        return (
+          <WidgetErrorBoundary name="Song Player">
+            <SongPlayer dragHandleProps={dragHandleProps} playlistUrl={songPlaylistUrl} autoPlay={songAutoPlay} customVideo={songCustomVideo} stations={lofiStations} />
+          </WidgetErrorBoundary>
+        );
       case "timeBoxing":
         return (
-          <TimeBoxing
-            dragHandleProps={dragHandleProps}
-            externalGroups={timeBoxingGroups}
-            onGroupsChange={onTimeBoxingGroupsChange}
-            timeboxing={timeboxing}
-            onSelectRoutine={onSelectRoutine}
-          />
+          <WidgetErrorBoundary name="Time Boxing">
+            <TimeBoxing
+  dragHandleProps={dragHandleProps}
+  externalGroups={timeBoxingGroups}
+  onGroupsChange={onTimeBoxingGroupsChange}
+  timeboxing={timeboxing}
+  onSelectRoutine={onSelectRoutine}
+/>
+          </WidgetErrorBoundary>
         );
-      // case "clock":
-      //   return null;
       default:
         return null;
     }
