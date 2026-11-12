@@ -1,0 +1,55 @@
+name: Encrypted cloud database backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    # Opt in only after the private backup destination and secrets are configured.
+    if: ${{ vars.CLOUD_DATABASE_BACKUPS_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Export database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_DB_URL"
+          test -n "$SUPABASE_DB_PASSWORD"
+          # Keep the URL template and password separate; encode reserved URL
+          # characters here so a valid password cannot break URI parsing.
+          encoded_password="$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["SUPABASE_DB_PASSWORD"], safe=""))')"
+          echo "::add-mask::$encoded_password"
+          case "$SUPABASE_DB_URL" in
+            *'[YOUR-PASSWORD]'*) ;;
+            *) echo 'SUPABASE_DB_URL must contain the literal [YOUR-PASSWORD] placeholder.'; exit 1 ;;
+          esac
+          database_url="${SUPABASE_DB_URL/\[YOUR-PASSWORD\]/$encoded_password}"
+          echo "::add-mask::$database_url"
+          umask 077
+          supabase db dump --yes --remote="$database_url" -f roles.sql --role-only
+          supabase db dump --yes --remote="$database_url" -f schema.sql
+          supabase db dump --yes --remote="$database_url" -f data.sql --data-only --use-copy -x 'storage.buckets_vectors' -x 'storage.vector_indexes'
+      - name: Encrypt export
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.CLOUD_BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test -n "$BACKUP_PASSPHRASE"
+          tar -czf - roles.sql schema.sql data.sql | gpg --batch --yes --symmetric --cipher-algo AES256 --pinentry-mode loopback --passphrase-fd 3 --output cloud-database.tar.gz.gpg 3<<<"$BACKUP_PASSPHRASE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-cloud-database-${{ github.run_id }}
+          path: cloud-database.tar.gz.gpg
+          retention-days: 7
+          if-no-files-found: error

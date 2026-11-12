@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { recordActivity } from "../utils/activityStore";
+import { recordAnalytics } from "../utils/analyticsStore.js";
 
 const getTodayUtcDate = () => {
   const d = new Date();
@@ -66,6 +67,7 @@ const WaterReminder = ({ dragHandleProps, goalMl: goalMlProp }) => {
   const updateDrunk = (nextDrunkMl) => {
     const safe = Math.min(goalMl, Math.max(0, Math.round(nextDrunkMl)));
     if (safe > drunkMl) recordActivity(1);
+    if (safe !== drunkMl) recordAnalytics("waterMl", safe - drunkMl);
     setDrunkMl(safe);
 
     const todayUtc = getTodayUtcDate();

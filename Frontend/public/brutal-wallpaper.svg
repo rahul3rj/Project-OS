@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse"><path d="M64 0H0v64" fill="none" stroke="#e7dec3" stroke-width="2" opacity=".18"/></pattern>
+    <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="4" cy="4" r="3" fill="#161616"/></pattern>
+  </defs>
+  <path fill="#34332f" d="M0 0h1600v1000H0z"/>
+  <path fill="url(#grid)" d="M0 0h1600v1000H0z"/>
+  <path d="M-80 116 388-42l160 450-468 158z" fill="#f4bd34" stroke="#161616" stroke-width="12"/>
+  <path d="m1110 -70 470 96 94 438-470-96z" fill="#e15c3b" stroke="#161616" stroke-width="12"/>
+  <path d="M-70 712 320 583l244 444-390 129z" fill="#81acb3" stroke="#161616" stroke-width="12"/>
+  <path d="m1200 640 435 125-131 360-435-125z" fill="#f4bd34" stroke="#161616" stroke-width="12"/>
+  <circle cx="1380" cy="505" r="132" fill="#e7dec3" stroke="#161616" stroke-width="12"/>
+  <circle cx="1380" cy="505" r="93" fill="url(#dots)"/>
+  <path d="M485 70h370v26H485zM698 119h230v12H698zM685 868h285v16H685zM630 905h387v9H630z" fill="#161616" opacity=".5"/>
+  <path d="M430 835h88v-30h24v30h88v24h-88v30h-24v-30h-88z" fill="#161616" opacity=".7"/>
+</svg>

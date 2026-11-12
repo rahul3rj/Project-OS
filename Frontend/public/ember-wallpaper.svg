@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#241827"/><stop offset=".48" stop-color="#754148"/><stop offset="1" stop-color="#c87e61"/></linearGradient><radialGradient id="sun"><stop stop-color="#ffd6a3" stop-opacity=".9"/><stop offset="1" stop-color="#f4ad7d" stop-opacity="0"/></radialGradient></defs>
+  <path fill="url(#sky)" d="M0 0h1600v1000H0z"/><circle fill="url(#sun)" cx="1120" cy="365" r="365"/><circle fill="#fbd3a5" opacity=".72" cx="1120" cy="365" r="94"/>
+  <path fill="#9c5960" opacity=".55" d="M0 443c250-46 395 54 631 9s405-46 584 6 278 20 385-16v105H0Z"/>
+  <path fill="#5d3949" d="M0 655c200-55 295-154 475-125 190 31 301 157 499 110s377-155 626-94v454H0Z"/>
+  <path fill="#3c293a" d="M0 749c236-117 378-59 531 8s335 56 504-4 350-81 565 7v240H0Z"/>
+  <path fill="#211e2d" d="M0 857c195-72 367-58 524 1s343-4 513-40 368-36 563 30v152H0Z"/>
+  <g stroke="#ffcb9d" opacity=".2"><path d="M149 254h114M244 280h64M1249 185h107M1290 207h62"/></g>
+</svg>

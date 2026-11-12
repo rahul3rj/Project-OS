@@ -598,6 +598,9 @@ const DraggableWidget = ({
 
 const DashboardGrid = ({
   showTimer = true,
+  focusNotifEnabled = false,
+  focusEndRingtone = "beep",
+  restEndRingtone = "beep",
   showTodo = true,
   showStreakGrid = true,
   showSongPlayer = true,
@@ -607,6 +610,8 @@ const DashboardGrid = ({
   importantTabsConfig,
   timeBoxingGroups,
   onTimeBoxingGroupsChange,
+  timeboxing,
+  onSelectRoutine,
   songPlaylistUrl,
   songAutoPlay,
   songCustomVideo,
@@ -614,6 +619,8 @@ const DashboardGrid = ({
   waterGoalMl,
   streakDataSource = "local",
   githubUsername = "",
+  codeforcesUsername = "",
+  leetcodeUsername = "",
 }) => {
   const gridRef = useRef(null);
   const [deviceTier, setDeviceTier] = useState(() => getDeviceTier());
@@ -1143,7 +1150,7 @@ const DashboardGrid = ({
   const renderWidget = (id, dragHandleProps) => {
     switch (id) {
       case "timer":
-        return <Timer dragHandleProps={dragHandleProps} />;
+        return <Timer dragHandleProps={dragHandleProps} focusNotifEnabled={focusNotifEnabled} focusEndRingtone={focusEndRingtone} restEndRingtone={restEndRingtone} />;
       case "waterReminder":
         return <WaterReminder dragHandleProps={dragHandleProps} goalMl={waterGoalMl} />;
       case "todo":
@@ -1151,7 +1158,7 @@ const DashboardGrid = ({
       case "importantTabs":
         return <ImportantTabs dragHandleProps={dragHandleProps} tabsConfig={importantTabsConfig} />;
       case "streakGrid":
-        return <StreakGrid dragHandleProps={dragHandleProps} dataSource={streakDataSource} githubUsername={githubUsername} />;
+        return <StreakGrid dragHandleProps={dragHandleProps} dataSource={streakDataSource} githubUsername={githubUsername} codeforcesUsername={codeforcesUsername} leetcodeUsername={leetcodeUsername} />;
       case "songPlayer":
         return <SongPlayer dragHandleProps={dragHandleProps} playlistUrl={songPlaylistUrl} autoPlay={songAutoPlay} customVideo={songCustomVideo} stations={lofiStations} />;
       case "timeBoxing":
@@ -1160,6 +1167,8 @@ const DashboardGrid = ({
             dragHandleProps={dragHandleProps}
             externalGroups={timeBoxingGroups}
             onGroupsChange={onTimeBoxingGroupsChange}
+            timeboxing={timeboxing}
+            onSelectRoutine={onSelectRoutine}
           />
         );
       // case "clock":

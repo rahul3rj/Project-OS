@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { updateTodayCompletedTasksCount } from "../utils/activityStore";
 import { IconDropdownPopover } from "./IconPicker.jsx";
 import { TimeDropdownPopover } from "./TimePicker.jsx";
+import { CUSTOM_ROUTINE } from "../utils/timeboxing.js";
+import { recordAnalytics } from "../utils/analyticsStore.js";
 
 const makeId = () => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
@@ -101,7 +103,7 @@ const getNowMinutes = () => {
   return d.getHours() * 60 + d.getMinutes();
 };
 
-const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange }) => {
+const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange, timeboxing, onSelectRoutine }) => {
   const [expandedId, setExpandedId] = useState(null);
   const [nowMinutes, setNowMinutes] = useState(getNowMinutes);
 
@@ -120,7 +122,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange }) => {
 
   // Use externalGroups when provided (always the case from DashboardGrid)
   const groups = useMemo(() => {
-    if (Array.isArray(externalGroups) && externalGroups.length > 0) {
+    if (Array.isArray(externalGroups)) {
       return externalGroups;
     }
     return DEFAULT_TASK_GROUPS;
@@ -197,6 +199,9 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange }) => {
   }, [activeId]);
 
   const toggleSubtask = (groupId, subtaskId) => {
+    const previousGroup = groups.find((group) => group.id === groupId);
+    const previousTask = previousGroup?.subtasks?.find((task) => task.id === subtaskId);
+    const wasComplete = Boolean(previousGroup?.subtasks?.length && previousGroup.subtasks.every((task) => task.done));
     const nextGroups = groups.map((g) =>
       g.id !== groupId
         ? g
@@ -215,6 +220,11 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange }) => {
     const completedMainCount = nextGroups.filter(
       (g) => g.subtasks && g.subtasks.length > 0 && g.subtasks.every((s) => s.done),
     ).length;
+
+    const nextGroup = nextGroups.find((group) => group.id === groupId);
+    const isComplete = Boolean(nextGroup?.subtasks?.length && nextGroup.subtasks.every((task) => task.done));
+    if (previousTask) recordAnalytics("subtasksCompleted", previousTask.done ? -1 : 1);
+    if (wasComplete !== isComplete) recordAnalytics("blocksCompleted", isComplete ? 1 : -1);
 
     updateTodayCompletedTasksCount(completedMainCount);
   };
@@ -296,6 +306,69 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange }) => {
     setDraftTimePickerOpen(false);
   };
 
+  const chooseRoutine = (id) => {
+    onSelectRoutine?.(id);
+    setDraftNewTask(null);
+  };
+
+  if (timeboxing && !timeboxing.selectedId) {
+    const [year, month, day] = (timeboxing.date || "").split("-").map(Number);
+    const routineDate = year && month && day ? new Date(Date.UTC(year, month - 1, day)) : new Date();
+    const dayOfWeek = routineDate.getUTCDay();
+    const routines = [...(timeboxing.routines || [])].sort((a, b) =>
+      Number(Boolean(b.days?.includes(dayOfWeek))) - Number(Boolean(a.days?.includes(dayOfWeek))),
+    );
+    return (
+      <div className="figma-glass-static rounded-[26px] px-4 py-3 text-white font-gilroy-medium w-full h-full flex flex-col shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between gap-2 pb-2.5 shrink-0 relative z-10">
+          <div className="flex items-center gap-2 text-white/70 text-xs cursor-grab active:cursor-grabbing" data-drag-handle {...dragHandleProps}>
+            <i className="ri-draggable text-sm pointer-events-none" />
+            <span className="pointer-events-none">Time Boxing</span>
+          </div>
+          <span className="text-[10px] text-white/55 whitespace-nowrap">
+            {routineDate.toLocaleDateString(undefined, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" })} UTC
+          </span>
+        </div>
+        <div className="overflow-y-auto scrollbar-hide min-h-0 flex-1 flex flex-col relative z-10 border-t border-white/10">
+          <div className="my-auto py-4">
+          <div className="pb-3">
+            <p className="text-[10px] uppercase tracking-[0.12em] text-white/50 font-gilroy-bold">A fresh start</p>
+            <h2 className="text-base font-gilroy-bold text-white leading-tight mt-1">Choose your routine</h2>
+            <p className="text-[11px] text-white/60 mt-1 leading-snug">
+              {timeboxing.askEveryDay ? "Pick a plan for today." : "No routine is assigned today. Pick a plan to begin."}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2" aria-label="Available routines">
+            {routines.map((routine) => {
+              const blockCount = Array.isArray(routine.groups) ? routine.groups.length : 0;
+              const isScheduled = routine.days?.includes(dayOfWeek);
+              return (
+                <button key={routine.id} type="button" onClick={() => chooseRoutine(routine.id)} title={routine.name || "Untitled routine"}
+                  className="group/routine w-full flex items-center gap-2.5 text-left px-3 py-2.5 rounded-xl border border-white/15 bg-white/5 hover:bg-white/15 hover:border-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 transition-colors cursor-pointer">
+                  <span className="h-8 w-8 shrink-0 rounded-lg bg-white/10 flex items-center justify-center text-white/80"><i className="ri-calendar-check-line text-base" aria-hidden="true" /></span>
+                  <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+                    <span className="text-xs font-gilroy-bold text-white truncate">{routine.name || "Untitled routine"}</span>
+                    <span className="text-[10px] text-white/55">{blockCount} {blockCount === 1 ? "task block" : "task blocks"}</span>
+                  </span>
+                  {isScheduled && <span className="text-[9px] text-white/70 bg-white/10 rounded-full px-2 py-1 shrink-0">Today</span>}
+                  <i className="ri-arrow-right-s-line text-base text-white/55 group-hover/routine:text-white shrink-0" aria-hidden="true" />
+                </button>
+              );
+            })}
+            <button type="button" onClick={() => chooseRoutine(CUSTOM_ROUTINE)}
+              className="w-full flex items-center gap-2.5 text-left px-3 py-2.5 rounded-xl border border-dashed border-white/20 hover:bg-white/10 hover:border-white/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 transition-colors cursor-pointer">
+              <span className="h-8 w-8 shrink-0 rounded-lg bg-white/10 flex items-center justify-center text-white/75"><i className="ri-add-line text-base" aria-hidden="true" /></span>
+              <span className="flex-1 min-w-0 flex flex-col gap-0.5"><span className="text-xs font-gilroy-bold text-white">Create a plan for today</span><span className="text-[10px] text-white/55">Start with a blank plan</span></span>
+              <i className="ri-arrow-right-s-line text-base text-white/55 shrink-0" aria-hidden="true" />
+            </button>
+          </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="group/widget figma-glass-static rounded-[26px] px-4 py-3 text-white font-gilroy-medium w-full h-full select-none flex flex-col shadow-2xl relative overflow-hidden">
       {/* Header Row */}
@@ -309,6 +382,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange }) => {
           <span className="pointer-events-none">Time Boxing</span>
         </div>
 
+        <div className="flex items-center gap-1">
         {/* Add Task Button parallel to Time Boxing title (only visible on hover) */}
         <button
           type="button"
@@ -319,6 +393,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange }) => {
           <i className="ri-add-line text-xs font-bold"></i>
           <span>Add Task</span>
         </button>
+        </div>
       </div>
 
       {/* Task Groups + Timeline */}
@@ -327,6 +402,7 @@ const TimeBoxing = ({ dragHandleProps, externalGroups, onGroupsChange }) => {
         className="w-full flex-1 min-h-0 overflow-y-auto scrollbar-hide z-10 relative pr-0.5"
       >
         <div className="flex flex-col">
+          {groups.length === 0 && !draftNewTask && <p className="text-xs text-white/60 py-4">No task blocks yet. Hover over this widget and select Add Task to plan your day.</p>}
           {groups.map((group, index) => {
             const total = group.subtasks?.length || 0;
             const done = (group.subtasks || []).filter((s) => s.done).length;

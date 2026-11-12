@@ -4,8 +4,11 @@ import Clock from "./components/Clock.jsx";
 import DashboardGrid from "./components/DashboardGrid.jsx";
 import HeroView from "./components/HeroView.jsx";
 import SettingsPage from "./components/SettingsPage.jsx";
-import { storageGetMultiple, storageSet } from "./utils/storage.js";
-import { STORAGE_KEY_UI_THEME } from "./themes/index.js";
+import AnalyticsPage from "./components/AnalyticsPage.jsx";
+import { CloudSyncRuntime } from "./components/CloudSync.jsx";
+import { storageGetMultiple, storageSet, subscribeStorageKey } from "./utils/storage.js";
+import { STORAGE_KEY_UI_THEME, UI_THEMES, upgradeBotanicalPalette, upgradeBrutalPalette, upgradeRetroPalette, upgradeXpPalette } from "./themes/index.js";
+import { ACTIVE_GROUPS_KEY, ROUTINES_KEY, CUSTOM_ROUTINE, advanceDay, createRoutinesState, scheduledRoutine, startRoutine } from "./utils/timeboxing.js";
 
 const STORAGE = {
   wallpaper: "settings_wallpaper_v1",
@@ -14,6 +17,8 @@ const STORAGE = {
   showStreakGrid: "settings_show_streak_grid_v1",
   streakDataSource: "settings_streak_data_source_v1",
   githubUsername: "settings_github_username_v1",
+  codeforcesUsername: "settings_codeforces_username_v1",
+  leetcodeUsername: "settings_leetcode_username_v1",
   showSongPlayer: "settings_show_song_player_v1",
   themeColor: "settings_theme_color_v1",
   shortcuts: "settings_shortcuts_v1",
@@ -34,7 +39,13 @@ const STORAGE = {
   lofiStations: "settings_lofi_stations_v1",
   importantTabsConfig: "settings_imp_tabs_config_v1",
   timeBoxingGroups: "settings_timebox_groups_v2",
+  timeboxingRoutines: ROUTINES_KEY,
   themeTextColorIndex: "settings_theme_text_color_idx_v1",
+  islandEnabled: "settings_island_enabled_v1",
+  islandXRatio: "settings_island_x_ratio_v1",
+  islandClosedUtc: "settings_island_closed_utc_v1",
+  focusSites: "settings_focus_sites_v1",
+  distractionSites: "settings_distraction_sites_v1",
   timeboxingLastResetDate: "settings_timebox_last_reset_utc_v1",
   uiTheme: STORAGE_KEY_UI_THEME,
   baseFont: "settings_base_font_v1",
@@ -223,10 +234,15 @@ export const DEFAULT_THEME_PALETTES = {
   manga: ["#CBD5E1", "#64748B", "#334155", "#0F172A"],
   cyberpunk: ["#FF0055", "#00F0FF", "#FFE600", "#120024"],
   pixel: ["#00FF66", "#009933", "#003311", "#051A0A"],
+  aurora: ["#D4F7FF", "#F4689D", "#285873", "#0B1823"],
+  ember: ["#FFE56B", "#F7B73A", "#D15A3A", "#1D1D1D"],
+  botanical: ["#F3E6C8", "#C5B691", "#79805C", "#27382E"],
+  obsidian: ["#F4F4F4", "#C0C0C0", "#555E9A", "#0A1A63"],
 };
 
 const App = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [activeStep, setActiveStep] = useState("hero");
 
   // existing state
@@ -236,6 +252,8 @@ const App = () => {
   const [showStreakGrid, setShowStreakGrid] = useState(true);
   const [streakDataSource, setStreakDataSource] = useState("local");
   const [githubUsername, setGithubUsername] = useState("");
+  const [codeforcesUsername, setCodeforcesUsername] = useState("");
+  const [leetcodeUsername, setLeetcodeUsername] = useState("");
   const [showSongPlayer, setShowSongPlayer] = useState(true);
   const [themeColor, setThemeColor] = useState(DEFAULT_THEME_PALETTE);
   const [themeColorsMap, setThemeColorsMap] = useState(DEFAULT_THEME_PALETTES);
@@ -261,8 +279,12 @@ const App = () => {
   const [lofiStations, setLofiStations] = useState(DEFAULT_LOFI_STATIONS);
 
   const [importantTabsConfig, setImportantTabsConfig] = useState(DEFAULT_IMPORTANT_TABS);
-  const [timeBoxingGroups, setTimeBoxingGroups] = useState(DEFAULT_TIMEBOX_GROUPS);
-  const [_timeboxingLastResetDate, setTimeboxingLastResetDate] = useState(null);
+  const [timeboxing, setTimeboxing] = useState(null);
+  const timeboxingRef = useRef(null);
+  const timeboxingWriterRef = useRef(makeId());
+  const [islandEnabled, setIslandEnabled] = useState(true);
+  const [focusSites, setFocusSites] = useState([]);
+  const [distractionSites, setDistractionSites] = useState([]);
   const [uiTheme, setUiTheme] = useState("default");
   const [baseFont, setBaseFont] = useState("Gilroy");
   const [baseFontSize, setBaseFontSize] = useState(16);
@@ -271,7 +293,6 @@ const App = () => {
   const [isThemeChanging, setIsThemeChanging] = useState(false);
 
   const hydratedRef = useRef(false);
-  const lastResetDateRef = useRef(null);
 
   /* ── Hydration ── */
   useEffect(() => {
@@ -308,48 +329,46 @@ const App = () => {
         const storedImpTabsCfg = data[STORAGE.importantTabsConfig];
         const storedStreakDataSource = data[STORAGE.streakDataSource];
         const storedGithubUsername = data[STORAGE.githubUsername];
-        let storedTimeboxGroups = data[STORAGE.timeBoxingGroups];
+        const storedCodeforcesUsername = data[STORAGE.codeforcesUsername];
+        const storedLeetcodeUsername = data[STORAGE.leetcodeUsername];
+        const storedTimeboxGroups = data[STORAGE.timeBoxingGroups];
         const storedThemeTextIdx = data[STORAGE.themeTextColorIndex];
-        const storedResetDate = data[STORAGE.timeboxingLastResetDate];
         const storedUiTheme = data[STORAGE.uiTheme];
         const storedBaseFont = data[STORAGE.baseFont];
         const storedBaseFontSize = data[STORAGE.baseFontSize];
+        const storedIslandEnabled = data[STORAGE.islandEnabled];
+        const storedFocusSites = data[STORAGE.focusSites];
+        const storedDistractionSites = data[STORAGE.distractionSites];
 
-        const todayUtc = getTodayUtcDate();
-
-        // Check if a new UTC 00 day (5:30 AM IST) has arrived since last reset
-        if (Array.isArray(storedTimeboxGroups)) {
-          if (storedResetDate && storedResetDate !== todayUtc) {
-            storedTimeboxGroups = storedTimeboxGroups.map((group) => {
-              const isCompleted =
-                group.subtasks?.length > 0 && group.subtasks.every((s) => s.done);
-              return {
-                ...group,
-                streak: isCompleted ? (group.streak || 0) + 1 : (group.streak || 0),
-                subtasks: (group.subtasks || []).map((s) => ({ ...s, done: false })),
-              };
-            });
-            storageSet(STORAGE.timeBoxingGroups, storedTimeboxGroups);
-            storageSet(STORAGE.timeboxingLastResetDate, todayUtc);
-          } else if (!storedResetDate) {
-            storageSet(STORAGE.timeboxingLastResetDate, todayUtc);
-          }
-        }
-
-        lastResetDateRef.current = todayUtc;
-        setTimeboxingLastResetDate(todayUtc);
+        const savedRoutines = data[STORAGE.timeboxingRoutines];
+        const loadedTimeboxing = savedRoutines && Array.isArray(savedRoutines.routines)
+          ? advanceDay(savedRoutines)
+          : createRoutinesState(Array.isArray(storedTimeboxGroups) ? storedTimeboxGroups : DEFAULT_TIMEBOX_GROUPS);
+        const initialTimeboxing = { ...loadedTimeboxing, writerId: timeboxingWriterRef.current };
+        timeboxingRef.current = initialTimeboxing;
+        setTimeboxing(initialTimeboxing);
+        storageSet(ROUTINES_KEY, initialTimeboxing);
+        storageSet(ACTIVE_GROUPS_KEY, initialTimeboxing.dailyGroups);
 
         if (storedWallpaper && typeof storedWallpaper === "object") setWallpaper(storedWallpaper);
         if (typeof storedShowTimer === "boolean") setShowTimer(storedShowTimer);
         if (typeof storedShowTodo === "boolean") setShowTodo(storedShowTodo);
         if (typeof storedShowStreakGrid === "boolean") setShowStreakGrid(storedShowStreakGrid);
-        if (storedStreakDataSource === "local" || storedStreakDataSource === "github") setStreakDataSource(storedStreakDataSource);
+        if (["local", "github", "codeforces", "leetcode"].includes(storedStreakDataSource)) setStreakDataSource(storedStreakDataSource);
+        else if (storedStreakDataSource != null) storageSet(STORAGE.streakDataSource, "local");
         if (typeof storedGithubUsername === "string") setGithubUsername(storedGithubUsername);
+        if (typeof storedCodeforcesUsername === "string") setCodeforcesUsername(storedCodeforcesUsername);
+        if (typeof storedLeetcodeUsername === "string") setLeetcodeUsername(storedLeetcodeUsername);
         if (typeof storedShowSongPlayer === "boolean") setShowSongPlayer(storedShowSongPlayer);
         const storedThemeColorsMap = data[STORAGE.themeColorsMap];
         let activeThemeMap = { ...DEFAULT_THEME_PALETTES };
         if (storedThemeColorsMap && typeof storedThemeColorsMap === "object") {
           activeThemeMap = { ...DEFAULT_THEME_PALETTES, ...storedThemeColorsMap };
+          // Update the previous built-in Botanical palette while preserving custom colors.
+          activeThemeMap.botanical = upgradeBotanicalPalette(activeThemeMap.botanical, DEFAULT_THEME_PALETTES.botanical);
+          activeThemeMap.ember = upgradeBrutalPalette(activeThemeMap.ember, DEFAULT_THEME_PALETTES.ember);
+          activeThemeMap.aurora = upgradeRetroPalette(activeThemeMap.aurora, DEFAULT_THEME_PALETTES.aurora);
+          activeThemeMap.obsidian = upgradeXpPalette(activeThemeMap.obsidian, DEFAULT_THEME_PALETTES.obsidian);
         } else if (storedThemeColor) {
           if (Array.isArray(storedThemeColor) && storedThemeColor.length === 4) {
             activeThemeMap.default = storedThemeColor;
@@ -360,7 +379,7 @@ const App = () => {
         }
         setThemeColorsMap(activeThemeMap);
 
-        const currentUiTheme = (typeof storedUiTheme === "string" && ["default","manga","cyberpunk","pixel"].includes(storedUiTheme)) ? storedUiTheme : "default";
+        const currentUiTheme = UI_THEMES.some((theme) => theme.id === storedUiTheme) ? storedUiTheme : "default";
         const activePalette = activeThemeMap[currentUiTheme] || DEFAULT_THEME_PALETTES[currentUiTheme] || DEFAULT_THEME_PALETTES.default;
         setThemeColor(activePalette);
 
@@ -396,15 +415,17 @@ const App = () => {
           setSongCustomVideo(DEFAULT_SONG_CUSTOM_VIDEO);
         }
         if (Array.isArray(storedLofiStations) && storedLofiStations.length > 0) setLofiStations(storedLofiStations);
-        if (Array.isArray(storedTimeboxGroups) && storedTimeboxGroups.length > 0) setTimeBoxingGroups(storedTimeboxGroups);
         let parsedImpTabs = storedImpTabsCfg;
         if (typeof storedImpTabsCfg === "string") {
           try { parsedImpTabs = JSON.parse(storedImpTabsCfg); } catch { parsedImpTabs = null; }
         }
         if (Array.isArray(parsedImpTabs)) setImportantTabsConfig(parsedImpTabs);
-        if (typeof storedUiTheme === "string" && ["default","manga","cyberpunk","pixel"].includes(storedUiTheme)) setUiTheme(storedUiTheme);
+        if (UI_THEMES.some((theme) => theme.id === storedUiTheme)) setUiTheme(storedUiTheme);
         if (typeof storedBaseFont === "string" && storedBaseFont.trim()) setBaseFont(storedBaseFont);
         if (typeof storedBaseFontSize === "number" && storedBaseFontSize >= 12 && storedBaseFontSize <= 24) setBaseFontSize(storedBaseFontSize);
+        if (typeof storedIslandEnabled === "boolean") setIslandEnabled(storedIslandEnabled);
+        if (Array.isArray(storedFocusSites)) setFocusSites(storedFocusSites);
+        if (Array.isArray(storedDistractionSites)) setDistractionSites(storedDistractionSites);
 
         // Mark hydrated BEFORE React flushes the batch above, so persistence
         // effects that fire from these state updates are correctly allowed.
@@ -427,6 +448,8 @@ const App = () => {
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.showStreakGrid, showStreakGrid); }, [showStreakGrid]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.streakDataSource, streakDataSource); }, [streakDataSource]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.githubUsername, githubUsername); }, [githubUsername]);
+  useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.codeforcesUsername, codeforcesUsername); }, [codeforcesUsername]);
+  useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.leetcodeUsername, leetcodeUsername); }, [leetcodeUsername]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.showSongPlayer, showSongPlayer); }, [showSongPlayer]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.themeColor, themeColor); }, [themeColor]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.themeColorsMap, themeColorsMap); }, [themeColorsMap]);
@@ -449,40 +472,105 @@ const App = () => {
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.songCustomVideo, songCustomVideo); }, [songCustomVideo]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.lofiStations, lofiStations); }, [lofiStations]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.importantTabsConfig, importantTabsConfig); }, [importantTabsConfig]);
-  useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.timeBoxingGroups, timeBoxingGroups); }, [timeBoxingGroups]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.themeTextColorIndex, themeTextColorIndex); }, [themeTextColorIndex]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.uiTheme, uiTheme); }, [uiTheme]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.baseFont, baseFont); }, [baseFont]);
   useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.baseFontSize, baseFontSize); }, [baseFontSize]);
+  useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.islandEnabled, islandEnabled); }, [islandEnabled]);
+  useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.focusSites, focusSites); }, [focusSites]);
+  useEffect(() => { if (!hydratedRef.current) return; storageSet(STORAGE.distractionSites, distractionSites); }, [distractionSites]);
 
-  /* ── Periodic & Focus Check for 00:00 UTC / 5:30 AM IST Daily Reset ── */
+  /* ── Reset the Dynamic Island back to the horizontal centre ── */
+  const handleResetIslandPosition = () => storageSet(STORAGE.islandXRatio, 0.5);
+
+  /* ── Dynamic Island on/off: shared by the top-bar button and the Settings toggle ── */
+  const handleIslandEnabledChange = (next) => {
+    const enabled = Boolean(next);
+    // Clear any legacy "hidden for today" flag so turning it on always shows it.
+    if (enabled) storageSet(STORAGE.islandClosedUtc, null);
+    setIslandEnabled(enabled);
+  };
+
+  /* ── Keep in sync when the island turns itself off (mascot × button) from a website ── */
+  useEffect(() => {
+    return subscribeStorageKey(STORAGE.islandEnabled, (value) => {
+      setIslandEnabled(value !== false);
+    });
+  }, []);
+
+  const commitTimeboxing = (next) => {
+    if (!next || next === timeboxingRef.current) return;
+    const written = { ...next, writerId: timeboxingWriterRef.current };
+    timeboxingRef.current = written;
+    setTimeboxing(written);
+    storageSet(ROUTINES_KEY, written);
+    storageSet(ACTIVE_GROUPS_KEY, written.dailyGroups);
+  };
+
+  const changeDailyGroups = (groups) => {
+    const current = timeboxingRef.current;
+    if (current?.selectedId) commitTimeboxing({ ...current, dailyGroups: groups });
+  };
+
+  const updateRoutines = (routines) => {
+    const current = timeboxingRef.current;
+    if (!current) return;
+    const oldRoutine = current.routines.find((item) => item.id === current.selectedId);
+    const nextRoutine = routines.find((item) => item.id === current.selectedId);
+    let next = { ...current, routines };
+    if (oldRoutine && !nextRoutine) {
+      next = { ...next, selectedId: null, dailyGroups: [] };
+    }
+    if (oldRoutine && nextRoutine && oldRoutine.groups !== nextRoutine.groups) {
+      const previousIds = new Set(oldRoutine.groups.map((group) => group.id));
+      const extras = current.dailyGroups.filter((group) => !previousIds.has(group.id));
+      next.dailyGroups = [...nextRoutine.groups.map((group) => {
+        const existing = current.dailyGroups.find((item) => item.id === group.id);
+        return { ...group, subtasks: (group.subtasks || []).map((task) => ({
+          ...task, done: existing?.subtasks?.find((item) => item.id === task.id)?.done || false,
+        })) };
+      }), ...extras];
+    }
+    if (!next.askEveryDay && current.selectedId !== CUSTOM_ROUTINE) {
+      const previousScheduled = scheduledRoutine(current.routines);
+      const scheduled = scheduledRoutine(routines);
+      if ((oldRoutine && !nextRoutine) || (previousScheduled?.id !== scheduled?.id && (!current.selectedId || current.selectedId === previousScheduled?.id))) {
+        next = scheduled ? startRoutine(next, scheduled.id) : { ...next, selectedId: null, dailyGroups: [] };
+      }
+    }
+    commitTimeboxing(next);
+  };
+
+  const changeAskEveryDay = (enabled) => {
+    const current = timeboxingRef.current;
+    if (!current) return;
+    let next = { ...current, askEveryDay: enabled };
+    if (enabled) {
+      next = { ...next, drafts: current.selectedId ? { ...current.drafts, [current.selectedId]: current.dailyGroups } : current.drafts, selectedId: null, dailyGroups: [] };
+    } else {
+      const scheduled = scheduledRoutine(current.routines);
+      next = scheduled ? startRoutine(next, scheduled.id) : { ...next, selectedId: null, dailyGroups: [] };
+    }
+    commitTimeboxing(next);
+  };
+
+  /* Check the UTC calendar day while the dashboard is open. */
   useEffect(() => {
     if (!isHydrated) return;
-
     const checkAndRunReset = () => {
-      const todayUtc = getTodayUtcDate();
-      if (lastResetDateRef.current && lastResetDateRef.current !== todayUtc) {
-        lastResetDateRef.current = todayUtc;
-        setTimeboxingLastResetDate(todayUtc);
-        storageSet(STORAGE.timeboxingLastResetDate, todayUtc);
-
-        setTimeBoxingGroups((prevGroups) => {
-          if (!Array.isArray(prevGroups)) return prevGroups;
-          const resetGroups = prevGroups.map((group) => {
-            const isCompleted =
-              group.subtasks?.length > 0 && group.subtasks.every((s) => s.done);
-            return {
-              ...group,
-              streak: isCompleted ? (group.streak || 0) + 1 : (group.streak || 0),
-              subtasks: (group.subtasks || []).map((s) => ({ ...s, done: false })),
-            };
-          });
-          storageSet(STORAGE.timeBoxingGroups, resetGroups);
-          return resetGroups;
-        });
-      }
+      if (timeboxingRef.current) commitTimeboxing(advanceDay(timeboxingRef.current));
     };
 
+    let rolloverTimer;
+    const scheduleRollover = () => {
+      const now = new Date();
+      const nextMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+      rolloverTimer = setTimeout(() => {
+        checkAndRunReset();
+        scheduleRollover();
+      }, Math.max(0, nextMidnight - now.getTime() + 50));
+    };
+    scheduleRollover();
     const intervalId = setInterval(checkAndRunReset, 30000);
     const handleFocusOrVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -492,11 +580,20 @@ const App = () => {
 
     window.addEventListener("visibilitychange", handleFocusOrVisibility);
     window.addEventListener("focus", checkAndRunReset);
+    const unsubscribe = subscribeStorageKey(ROUTINES_KEY, (next) => {
+      if (!next || !Array.isArray(next.routines)) return;
+      if (next.writerId === timeboxingWriterRef.current) return;
+      if (JSON.stringify(next) === JSON.stringify(timeboxingRef.current)) return;
+      timeboxingRef.current = next;
+      setTimeboxing(next);
+    });
 
     return () => {
       clearInterval(intervalId);
+      clearTimeout(rolloverTimer);
       window.removeEventListener("visibilitychange", handleFocusOrVisibility);
       window.removeEventListener("focus", checkAndRunReset);
+      unsubscribe();
     };
   }, [isHydrated]);
 
@@ -506,13 +603,13 @@ const App = () => {
       if (e.key !== "Escape") return;
       // Settings and IconPickerModal handle Escape themselves (higher z-index / capture phase)
       // This only runs when we're on dashboard with no overlays open
-      if (!settingsOpen && activeStep === "dashboard") {
+      if (!settingsOpen && !analyticsOpen && activeStep === "dashboard") {
         setActiveStep("hero");
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [settingsOpen, activeStep]);
+  }, [settingsOpen, analyticsOpen, activeStep]);
 
   /* ── Dynamic Google Font Loader for Base Font ── */
   useEffect(() => {
@@ -572,12 +669,7 @@ const App = () => {
     if (wallpaper?.type === "image" && typeof wallpaper?.dataUrl === "string") {
       return <img src={wallpaper.dataUrl} alt="" className="theme-wallpaper h-full w-full object-cover select-none" />;
     }
-    const defaultWallpaperForTheme = {
-      manga: "/manga-wallpaper.jpg",
-      cyberpunk: "/cyberpunk-wallpaper.png",
-      pixel: "/cli-wallpaper.jpg",
-      default: "/default-wallpaper.jpg",
-    }[uiTheme] || "/default-wallpaper.jpg";
+    const defaultWallpaperForTheme = UI_THEMES.find((theme) => theme.id === uiTheme)?.image || "/default-wallpaper.jpg";
 
     return <img src={defaultWallpaperForTheme} alt="" className="theme-wallpaper h-full w-full object-cover select-none object-top" />;
   }, [wallpaper, uiTheme]);
@@ -723,6 +815,7 @@ const App = () => {
 
         {/* Taskbar */}
         <div
+          inert={activeStep !== "dashboard"}
           className={`absolute top-2.5 left-1/2 -translate-x-1/2 awwwards-motion z-30 ${
             activeStep === "dashboard"
               ? "translate-y-0 opacity-100 scale-100 pointer-events-auto"
@@ -740,12 +833,16 @@ const App = () => {
 
         {/* Dashboard Grid */}
         <div
+          inert={activeStep !== "dashboard"}
           className={`absolute inset-0 z-20 awwwards-motion pointer-events-none ${
             activeStep === "dashboard" ? "opacity-100 scale-100" : "opacity-0 scale-95"
           }`}
         >
           <DashboardGrid
             showTimer={showTimer}
+            focusNotifEnabled={focusNotifEnabled}
+            focusEndRingtone={focusEndRingtone}
+            restEndRingtone={restEndRingtone}
             showTodo={showTodo}
             showStreakGrid={showStreakGrid}
             showSongPlayer={showSongPlayer}
@@ -753,8 +850,10 @@ const App = () => {
             showImportantTabs={showImportantTabs}
             showTimeBoxing={showTimeBoxing}
             importantTabsConfig={importantTabsConfig}
-            timeBoxingGroups={timeBoxingGroups}
-            onTimeBoxingGroupsChange={setTimeBoxingGroups}
+            timeBoxingGroups={timeboxing?.dailyGroups || []}
+            onTimeBoxingGroupsChange={changeDailyGroups}
+            timeboxing={timeboxing}
+            onSelectRoutine={(id) => commitTimeboxing(startRoutine(timeboxingRef.current, id))}
             songPlaylistUrl={songPlaylistUrl}
             songAutoPlay={songAutoPlay}
             songCustomVideo={songCustomVideo}
@@ -762,12 +861,49 @@ const App = () => {
             waterGoalMl={waterGoalMl}
             streakDataSource={streakDataSource}
             githubUsername={githubUsername}
+            codeforcesUsername={codeforcesUsername}
+            leetcodeUsername={leetcodeUsername}
           />
+        </div>
+
+        {/* Top Left Controls */}
+        <div className="absolute top-2.5 left-5 flex items-center gap-3 pointer-events-auto z-30">
+          {/* Dynamic Island on/off (synced with Settings and the island's own × button) */}
+          <button
+            type="button"
+            onClick={() => handleIslandEnabledChange(!islandEnabled)}
+            className="figma-glass-card h-[6.5vh] w-[6.5vh] min-h-[42px] min-w-[42px] rounded-full flex items-center justify-center text-white cursor-pointer transition-all"
+            aria-label={islandEnabled ? "Turn off Dynamic Island on websites" : "Turn on Dynamic Island on websites"}
+            aria-pressed={islandEnabled}
+            title={islandEnabled ? "Dynamic Island: On" : "Dynamic Island: Off"}
+          >
+            <i
+              className={`${islandEnabled ? "ri-layout-top-2-fill" : "ri-layout-top-2-line opacity-45"} text-[2.8vh] relative z-10 transition-opacity duration-300`}
+            />
+            {/* Strike-through shown while disabled */}
+            <span
+              aria-hidden="true"
+              className={`absolute z-10 h-[3.4vh] min-h-[22px] w-[2px] rounded-full bg-current rotate-45 transition-all duration-300 ${
+                islandEnabled ? "scale-y-0 opacity-0" : "scale-y-100 opacity-90"
+              }`}
+            />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAnalyticsOpen(true)}
+            className="figma-glass-card h-[6.5vh] w-[6.5vh] min-h-[42px] min-w-[42px] rounded-full flex items-center justify-center text-white cursor-pointer transition-all"
+            aria-label="Open analytics"
+            title="Analytics"
+          >
+            <i className="ri-bar-chart-grouped-line text-[2.8vh] relative z-10" />
+          </button>
         </div>
 
         {/* Top Right Controls */}
         <div className="absolute top-2.5 right-5 flex items-center gap-3 pointer-events-auto z-30">
           <div
+            inert={activeStep !== "dashboard"}
             className={`awwwards-motion ${
               activeStep === "dashboard"
                 ? "opacity-100 scale-100 pointer-events-auto"
@@ -793,6 +929,9 @@ const App = () => {
             <i className="ri-settings-3-fill text-[2.8vh] relative z-10" />
           </button>
         </div>
+
+        {isHydrated && <CloudSyncRuntime />}
+        <AnalyticsPage open={analyticsOpen} onClose={() => setAnalyticsOpen(false)} waterGoalMl={waterGoalMl} timeboxing={timeboxing} />
 
         {/* Full-screen Settings Page */}
         <SettingsPage
@@ -862,8 +1001,18 @@ const App = () => {
           // TimeBoxing
           showTimeBoxing={showTimeBoxing}
           onShowTimeBoxingChange={setShowTimeBoxing}
-          timeBoxingGroups={timeBoxingGroups}
-          onTimeBoxingGroupsChange={setTimeBoxingGroups}
+          timeboxing={timeboxing}
+          onRoutinesChange={updateRoutines}
+          onAskEveryDayChange={changeAskEveryDay}
+          onSelectRoutine={(id) => commitTimeboxing(startRoutine(timeboxingRef.current, id))}
+          // Dynamic Island
+          islandEnabled={islandEnabled}
+          onIslandEnabledChange={handleIslandEnabledChange}
+          focusSites={focusSites}
+          onFocusSitesChange={setFocusSites}
+          distractionSites={distractionSites}
+          onDistractionSitesChange={setDistractionSites}
+          onResetIslandPosition={handleResetIslandPosition}
           // Streak
           showStreakGrid={showStreakGrid}
           onShowStreakGridChange={setShowStreakGrid}
@@ -871,6 +1020,10 @@ const App = () => {
           onStreakDataSourceChange={setStreakDataSource}
           githubUsername={githubUsername}
           onGithubUsernameChange={setGithubUsername}
+          codeforcesUsername={codeforcesUsername}
+          onCodeforcesUsernameChange={setCodeforcesUsername}
+          leetcodeUsername={leetcodeUsername}
+          onLeetcodeUsernameChange={setLeetcodeUsername}
         />
       </div>
     </div>

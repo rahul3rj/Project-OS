@@ -1,19 +1,20 @@
 <div align="center">
 
-<img src="./web/public/logo.png" alt="Project OS Logo" width="80" height="80" style="border-radius: 16px;" />
+<img src="./Frontend/public/logo.png" alt="Project OS Logo" width="80" height="80" style="border-radius: 16px;" />
 
 # Project OS
 
 **The OS You Were Always Missing**
 
+**Version 2.5.0**
+
 *Transform every new Chrome tab into a hyper-customizable productivity command center.*
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](./LICENSE)
+[![License: Personal Use](https://img.shields.io/badge/License-Personal%20Use-amber.svg?style=flat-square)](./LICENSE)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-7-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Chrome](https://img.shields.io/badge/Chrome-Manifest_V3-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
-[![Firefox](https://img.shields.io/badge/Firefox-Supported-FF7139?style=flat-square&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen?style=flat-square)](./CONTRIBUTING.md)
 [![Stars](https://img.shields.io/github/stars/rahul3rj/Project-OS?style=flat-square&color=FBBF24)](https://github.com/rahul3rj/Project-OS/stargazers)
 
@@ -35,7 +36,7 @@
 
 A companion **landing website** (`web/`) built with GSAP, Lenis smooth scroll, and a liquid-glass UI effect showcases the extension.
 
-> 🔒 **100% local & private.** No accounts. No tracking. No telemetry. Your data never leaves your machine.
+> 🔒 **Local-first.** Your data is stored on your device. Optional features, including activity sources, weather, and radio, contact external services. Cloud sync is in beta; new Google sign-ins are currently unavailable.
 
 ---
 
@@ -46,11 +47,9 @@ A companion **landing website** (`web/`) built with GSAP, Lenis smooth scroll, a
 <td width="50%">
 
 ### 🎨 Multi-Theme Engine
-4 handcrafted visual themes:
-- 💎 **Glassmorphism** — frosted glass, soft glows
-- ⚡ **Cyberpunk** — neon HUD, scanline textures
-- 🖋️ **Manga / Ink** — high-contrast monochrome
-- 👾 **Pixel Art** — nostalgic 8-bit retro arcade
+- **Default Glass**, **Cyberpunk 2077**, **Manga Style**, and **CLI Terminal**
+- **Retro**, **Brutal**, **Painting**, and **Windows XP** (beta)
+- Customize colors, wallpaper, and typography in Settings
 
 </td>
 <td width="50%">
@@ -76,29 +75,26 @@ A companion **landing website** (`web/`) built with GSAP, Lenis smooth scroll, a
 <td>
 
 ### 🎯 Pomodoro Focus Timer
-- Customizable work/rest durations
-- Session counter & daily focus tracking
-- Audio ringtone alerts
-- Chrome notification support
-- Syncs to activity streak log
+- Choose focus durations from 5 to 60 minutes
+- Set up focus and rest cycles for longer work sessions
+- Optional end-of-session sounds, including custom audio
+- Daily focus tracking and analytics
 
 </td>
 </tr>
 <tr>
 <td>
 
-### 🟩 GitHub Activity Matrix
-- GitHub-style contribution heatmap
-- Visualizes daily focus intensity
-- Live GitHub commit sync support
-- Long-term consistency streaks
+### 🟩 Activity Matrix
+- Contribution heatmaps for GitHub, Codeforces, and LeetCode
+- Local caching reduces repeated requests
+- See contribution totals and streaks
 
 </td>
 <td>
 
 ### 🎵 Ambient Audio Player
 - Lofi radio stations (Zeno.fm, FluxFM, Laut.fm)
-- YouTube audio integration
 - Spotify quick access
 - Volume control & custom stream URLs
 
@@ -108,19 +104,18 @@ A companion **landing website** (`web/`) built with GSAP, Lenis smooth scroll, a
 <td>
 
 ### 📅 Time-Boxing Planner
-- Hourly habit & routine blocks
-- Customizable task groups
-- Subtask checklists + streak tracking
-- Auto UTC midnight reset
+- Create multiple routines and assign them to weekdays
+- Ask for a routine each day or select it automatically
+- Task blocks, subtask checklists, and streak tracking
+- Daily rollover at 00:00 UTC
 
 </td>
 <td>
 
 ### 💧 Hydration Tracker
 - Interactive water intake monitor
-- `+250ml / +500ml / custom` quick logs
-- Visual hydration progress ring
-- Timed audio reminders
+- Log water intake and track progress toward your goal
+- Configurable reminder settings
 
 </td>
 </tr>
@@ -128,21 +123,28 @@ A companion **landing website** (`web/`) built with GSAP, Lenis smooth scroll, a
 <td>
 
 ### 🧭 Shortcuts
-- Quick-launch bar: **Gemini**, **Claude**, **ChatGPT**, **Copilot**, **Perplexity**, **DeepSeek**
-- Full CRUD for shortcuts
-- Custom icon/favicon upload
+- Quick-launch shortcuts and custom icons
+- Organize important tabs into groups
 
 </td>
 <td>
 
 ### 💾 Backup & Restore
-- Full JSON export/import of all settings
-- `chrome.storage.local` — stays on your device
-- Transfer seamlessly across machines
+- Export and restore a local JSON backup
+- Move supported settings and productivity data between devices
+- Cloud sync is in beta; new sign-ins are coming soon
 
 </td>
 </tr>
 </table>
+
+### 🏝️ Dynamic Island & distraction warning
+
+See your current task and focus timer while browsing. Configure work and distraction sites in Settings; during a focus session, listed distraction sites show a warning that you can dismiss.
+
+### 📊 Analytics
+
+Review locally stored focus time, completed sessions and tasks, water intake, time blocks, and site activity over time. Daily history starts when analytics is available; earlier activity may not be included.
 
 ---
 
@@ -155,7 +157,7 @@ A companion **landing website** (`web/`) built with GSAP, Lenis smooth scroll, a
 | **Drag & Drop** | [@dnd-kit/core](https://dndkit.com/) + `@dnd-kit/utilities` |
 | **Activity Graph** | `react-activity-calendar` |
 | **Icons** | Remix Icon (`remixicon`) |
-| **Extension API** | Chrome Manifest V3 (`chrome.storage.local`, `declarativeNetRequest`) |
+| **Extension API** | Chrome Manifest V3 (`chrome.storage.local`) |
 | **Landing Site** | [GSAP 3](https://gsap.com/) + [Lenis](https://lenis.darkroom.engineering/) smooth scroll |
 | **Build Tool** | Vite 7 (extension) · Vite 8 (web) |
 
@@ -163,75 +165,18 @@ A companion **landing website** (`web/`) built with GSAP, Lenis smooth scroll, a
 
 ## 🏗️ Project Structure
 
-```
-Chrome_Extension/
-├── README.md                       # You are here
-├── CONTRIBUTING.md                 # Contribution guidelines
-├── CODE_OF_CONDUCT.md              # Community code of conduct
-├── LICENSE                         # MIT License
-│
-├── Frontend/                       # Chrome Extension (Manifest V3)
-│   ├── package.json
-│   ├── vite.config.js
-│   ├── index.html
-│   ├── public/
-│   │   ├── manifest.json           # Chrome Extension manifest
-│   │   ├── rules.json              # declarativeNetRequest rules
-│   │   └── logo.png
-│   └── src/
-│       ├── App.jsx                 # Root: state, storage sync, settings
-│       ├── main.jsx
-│       ├── index.css               # Global styles & design tokens
-│       ├── components/
-│       │   ├── DashboardGrid.jsx   # dnd-kit drag & drop layout
-│       │   ├── HeroView.jsx        # Distraction-free focus view
-│       │   ├── Clock.jsx           # Smart clock & greeting widget
-│       │   ├── Taskbar.jsx         # Shortcuts quick-launch bar
-│       │   ├── Timer.jsx           # Pomodoro focus timer
-│       │   ├── Todo.jsx            # Task manager
-│       │   ├── TimeBoxing.jsx      # Hourly routine planner
-│       │   ├── StreakGrid.jsx      # GitHub-style activity matrix
-│       │   ├── WaterReminder.jsx   # Hydration tracker
-│       │   ├── SongPlayer.jsx      # Lofi & YouTube audio player
-│       │   ├── ImportantTabs.jsx   # Categorized bookmarks
-│       │   ├── SettingsPage.jsx    # Full settings & theme drawer
-│       │   ├── FigmaGlassCard.jsx  # Frosted glass card wrapper
-│       │   ├── IconPicker.jsx      # Custom icon picker UI
-│       │   └── TimePicker.jsx      # Time picker component
-│       ├── utils/
-│       │   ├── storage.js          # Chrome storage wrapper
-│       │   ├── activityStore.js    # Focus streak activity logger
-│       │   ├── youtube.js          # YouTube player helper
-│       │   └── spotify.js          # Spotify integration helper
-│       └── themes/
-│           ├── index.js            # Theme registry
-│           ├── cyberpunk.css
-│           ├── manga.css
-│           └── pixel.css
-│
-└── web/                            # Landing Website
-    ├── package.json
-    ├── vite.config.js
-    └── src/
-        ├── App.jsx                 # Lenis + GSAP scroll orchestration
-        ├── components/
-        │   ├── Navbar.jsx
-        │   ├── CursorFollower.jsx  # Magnetic custom cursor
-        │   └── RippleButton.jsx    # Ripple-effect CTA button
-        ├── sections/
-        │   ├── Hero.jsx            # Liquid-glass CTA hero
-        │   ├── Video.jsx           # Product showcase
-        │   ├── Features.jsx        # Interactive feature cards
-        │   ├── Themes.jsx          # Theme showcase carousel
-        │   ├── Comparison.jsx      # Before/after comparison
-        │   ├── Setup.jsx           # Installation guide
-        │   ├── Contributions.jsx   # Contributors orbital display
-        │   ├── FAQs.jsx            # Accordion FAQ
-        │   └── Footer.jsx          # Footer with liquid-glass CTAs
-        ├── data/
-        │   └── contributors.json
-        └── utils/
-            └── useLiquidGlass.js   # WebGL liquid-glass hook
+```text
+Project-OS/
+├── Frontend/                    # Browser extension
+│   ├── public/                  # Manifest, content scripts, fonts and assets
+│   ├── src/
+│   │   ├── components/          # Dashboard, settings, analytics and widgets
+│   │   ├── themes/              # Theme registry and styles
+│   │   └── utils/               # Storage, timer, analytics and sync helpers
+│   └── supabase/                # Cloud sync database setup
+├── web/                         # Companion landing website
+├── CONTRIBUTING.md
+└── LICENSE
 ```
 
 ---
@@ -240,9 +185,9 @@ Chrome_Extension/
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) `v18+`
+- [Node.js](https://nodejs.org/) `22.12+` (required by the current dependencies)
 - Google Chrome, Brave, Edge, Arc, or any Chromium-based browser
-- Mozilla Firefox (also supported)
+- The manifest includes Firefox settings; browser-specific behavior may vary
 
 ---
 
@@ -309,18 +254,18 @@ npm run dev
 
 ## 🔐 Permissions & Privacy
 
-Project OS requests only the minimum permissions required:
+The extension requests these browser permissions:
 
 ```json
-"permissions": ["storage", "unlimitedStorage", "declarativeNetRequest"]
+"permissions": ["identity", "storage", "unlimitedStorage"]
 ```
 
 | Permission | Why it's needed |
 |:---|:---|
-| `storage` / `unlimitedStorage` | Saves themes, wallpapers, shortcuts, todos, timer stats **locally on your device only** |
-| `declarativeNetRequest` | Enables smooth audio streaming for Lofi radio & YouTube embeds |
+| `storage` / `unlimitedStorage` | Saves settings and productivity data on your device |
+| `identity` | Supports the Google sign-in flow for the cloud sync beta |
 
-**No external servers. No analytics. No accounts. Ever.**
+The Dynamic Island also runs on permitted websites to show your focus status and distraction warnings. Features such as radio streaming, weather, and activity sources connect to external services. Cloud sync, when available and enabled, sends supported data to the configured Supabase project; wallpapers remain on the device.
 
 ---
 
@@ -338,25 +283,12 @@ Project OS requests only the minimum permissions required:
 
 ## 🤝 Contributing
 
-Contributions are what make open source such an amazing place to learn, inspire, and create. **Any contribution you make is greatly appreciated.** 💙
+Ideas, feedback, and code contributions are welcome! 💙
 
 Read our full [**Contributing Guide →**](./CONTRIBUTING.md)
 
-**Quick contribution flow:**
-
-```bash
-# 1. Fork the repo & clone your fork
-git clone https://github.com/YOUR_USERNAME/Project-OS.git
-
-# 2. Create a feature branch
-git checkout -b feat/your-amazing-feature
-
-# 3. Commit your changes
-git commit -m "feat: add your amazing feature"
-
-# 4. Push & open a Pull Request
-git push origin feat/your-amazing-feature
-```
+You can report bugs, propose features, or fork the repository to submit a pull
+request. See the contribution guide for the terms that apply to contributions.
 
 ---
 
@@ -379,25 +311,25 @@ Thanks goes to these wonderful people 💙
 <details>
 <summary><b>Is Project OS free?</b></summary>
 <br/>
-Yes — 100% free and open source under the MIT License.
+Starting with v2.1.0, Project OS is free for personal, educational, research, and other non-commercial use under the [Project OS Personal Use License](./LICENSE). Other uses may require permission; earlier MIT-licensed material retains its applicable rights.
 </details>
 
 <details>
 <summary><b>Does it collect any data?</b></summary>
 <br/>
-No. All data is stored locally using <code>chrome.storage.local</code>. Nothing is sent to external servers.
+Settings and productivity data are stored locally by default. Features such as weather, activity sources, and radio contact external services. Optional cloud sync is in beta; new sign-ins are currently unavailable.
 </details>
 
 <details>
 <summary><b>Can I use it on Firefox or Edge?</b></summary>
 <br/>
-Yes! Firefox is fully supported. Edge and other Chromium-based browsers work great too.
+Edge and other Chromium-based browsers can load the extension. The manifest also includes Firefox settings, but browser-specific features may behave differently.
 </details>
 
 <details>
 <summary><b>How do I back up my configuration?</b></summary>
 <br/>
-Go to Settings → Backup & Restore → Export JSON. To restore, import the same JSON file.
+Go to Settings → Backup &amp; reset to export a JSON backup or restore one. Cloud sync is in beta and new sign-ins are currently unavailable.
 </details>
 
 <details>
@@ -410,7 +342,7 @@ Absolutely! See the <a href="./CONTRIBUTING.md">Contributing Guide</a> for how t
 
 ## 📜 License
 
-Distributed under the **MIT License**. See [`LICENSE`](./LICENSE) for the full text.
+Starting with **v2.1.0**, Project OS releases are offered under the **Project OS Personal Use License**. Earlier releases were made available under MIT; rights already granted for that material continue even when it appears in a later release. See [`LICENSE`](./LICENSE) for the full terms and the original MIT notice.
 
 ---
 

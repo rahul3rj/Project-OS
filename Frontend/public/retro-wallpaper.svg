@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#344d52"/><stop offset="1" stop-color="#26383d"/></linearGradient>
+    <pattern id="waves" width="108" height="38" patternUnits="userSpaceOnUse"><path d="M-54 38a54 54 0 0 1 108 0m0 0a54 54 0 0 1 108 0M-38 38a38 38 0 0 1 76 0m32 0a38 38 0 0 1 76 0M-22 38a22 22 0 0 1 44 0m64 0a22 22 0 0 1 44 0" fill="none" stroke="#dbc8a9" stroke-opacity=".24" stroke-width="2"/></pattern>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".5" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h1600v1000H0z"/>
+  <circle cx="1210" cy="250" r="168" fill="#bd5a48"/>
+  <g fill="#e5d2b1" opacity=".23"><path d="M60 180h245c25 0 25-22 53-22s29 22 55 22h124v10H60z"/><path d="M873 106h105c22 0 22-16 46-16s24 16 45 16h126v8H873z"/><path d="M270 301h104c17 0 17-13 36-13s19 13 36 13h95v8H270z"/></g>
+  <path fill="#667873" d="M-60 745 358 332l266 253 188-182 333 337 205-159 310 179v240H-60z"/>
+  <path fill="#d7cfb6" d="m249 440 109-108 112 107-51-14-36 18-25-12-30 18-31-15z" opacity=".8"/>
+  <path fill="#405c5c" d="M-60 778 272 570l266 176 235-185 247 205 270-172 370 209v197H-60z"/>
+  <path fill="#263e43" d="M0 759c226-50 435-18 622 25s366-28 533-25 299 20 445 60v181H0z"/>
+  <path fill="url(#waves)" d="M0 754h1600v246H0z"/>
+  <g fill="#1c2e30"><path d="M58 1000V624h30v376zm-31-331h92v25H27zm-19-37h130l-10 21H18z"/><path d="M58 719 5 677v-13l53 35zm30 0 53-42v-13l-53 35z"/></g>
+  <path fill="#e4d0ad" opacity=".14" d="M0 0h1600v1000H0z" filter="url(#grain)"/>
+</svg>

@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { recordActivity } from "../utils/activityStore";
+import { recordAnalytics } from "../utils/analyticsStore.js";
+import { localDateKey } from "../utils/timeboxing.js";
 
 const STORAGE = {
   items: "todo_items_v2",
@@ -86,8 +88,10 @@ const Todo = ({ dragHandleProps }) => {
   const toggleDone = (id) => {
     const task = tasks.find((t) => t.id === id);
     if (task && !task.done) recordActivity(1);
+    if (task && !task.done) recordAnalytics("todoCompleted", 1);
+    if (task?.done && task.completedDate === localDateKey()) recordAnalytics("todoCompleted", -1);
     setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
+      prev.map((t) => (t.id === id ? { ...t, done: !t.done, completedDate: t.done ? null : localDateKey() } : t)),
     );
   };
 

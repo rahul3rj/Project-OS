@@ -3,6 +3,21 @@ const GITHUB_API = "https://api.github.com";
 const GITHUB_WEB = "https://github.com";
 const GITHUB_USERNAME_RE = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i;
 
+const rateLimitError = (res) => {
+  const error = new Error("Activity service rate limit reached. Try again later.");
+  const retry = res.headers.get("retry-after");
+  const reset = Number(res.headers.get("x-ratelimit-reset"));
+  const retrySeconds = Number(retry);
+  const retryDate = Date.parse(retry);
+  error.retryAfterMs = Math.max(0,
+    retry && Number.isFinite(retrySeconds) ? retrySeconds * 1000 : 0,
+    Number.isFinite(retryDate) ? retryDate - Date.now() : 0,
+    reset ? reset * 1000 - Date.now() : 0,
+  );
+  error.rateLimited = true;
+  return error;
+};
+
 /** Extracts a plain GitHub username from raw input (URL, @handle, or bare name). */
 export const extractUsername = (input) => {
   const raw = String(input ?? "").trim().replace(/^@+/, "");
@@ -63,6 +78,7 @@ const contributeDeltaForEvent = (event) => {
 const fetchJogruber = async (username) => {
   const url = `${JOG_RUBER_API}/v4/${encodeURIComponent(username)}`;
   const res = await fetch(url);
+  if (res.status === 429) throw rateLimitError(res);
   if (res.status === 404) {
     throw new Error(`GitHub user "@${username}" was not found.`);
   }
@@ -125,6 +141,7 @@ const parseContributionsHtml = (html) => {
 const fetchScrape = async (username) => {
   const url = `${GITHUB_WEB}/users/${encodeURIComponent(username)}/contributions`;
   const res = await fetch(url, { headers: { Accept: "text/html" } });
+  if (res.status === 429) throw rateLimitError(res);
   if (res.status === 404) {
     throw new Error(`GitHub user "@${username}" was not found.`);
   }
@@ -144,6 +161,7 @@ const fetchScrape = async (username) => {
     yearTotal: parsed.yearTotal,
     newest: Object.keys(parsed.days).sort().pop() ?? null,
     source: "github",
+    warning: "GitHub graph colors are available, but per-day counts are approximate.",
   };
 };
 
@@ -174,7 +192,7 @@ const fetchGitHubEvents = async (username, pages = 3) => {
         throw new Error(`GitHub user "@${username}" was not found.`);
       }
       if (res.status === 403 || res.status === 429) {
-        throw new Error("GitHub API rate limit reached. Try again later.");
+        throw rateLimitError(res);
       }
       throw new Error(`GitHub API error (HTTP ${res.status}).`);
     }
@@ -211,10 +229,12 @@ export const fetchGitHubContributions = async (inputUsername) => {
 
   try {
     return await fetchJogruber(username);
-  } catch {
+  } catch (error) {
+    if (error.rateLimited) throw error;
     try {
       return await fetchScrape(username);
-    } catch {
+    } catch (fallbackError) {
+      if (fallbackError.rateLimited) throw fallbackError;
       return fetchGitHubEvents(username);
     }
   }

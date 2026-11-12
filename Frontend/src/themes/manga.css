@@ -229,7 +229,8 @@
   color: #ffffff !important;
 }
 
-[data-theme="manga"] .card-glass-bg button {
+[data-theme="manga"] .card-glass-bg button,
+[data-theme="manga"] .settings-cloud-sync button {
   background: #ffffff !important;
   border: 2px solid color-mix(in srgb, var(--theme-1, #1a1a1a) 70%, #1a1a1a) !important;
   color: #1a1a1a !important;
